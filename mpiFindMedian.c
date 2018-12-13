@@ -88,12 +88,14 @@ void swap_values(float *array, int x, int y) {
 void generateNumbers(float *numberPart, int partLength, int processID) {
     srand((processID + 1) * time(NULL));     //Generate number to fill the array
     int i;
-    for (i = 0; i < partLength; i++)
-        numberPart[i] = rand() - rand();
+    for (i = 0; i < partLength; i++){
+        numberPart[i] = ((float)rand())/1000 ;//- rand();
+        //printf("%.6f\n",numberPart[i]);
+    }
 }
 
 /***Validates the stability of the operation****/
-void validation(int median, int partLength, int size, int *numberPart, int processId) {
+void validation(float median, int partLength, int size, float *numberPart, int processId) {
     MPI_Bcast(&median, 1, MPI_INT, 0, MPI_COMM_WORLD);
     int countMin = 0;
     int countMax = 0;
@@ -151,13 +153,15 @@ void validationST(float median, int size, float *numberPart) {
 }
 
 /****Part executed only by the Master Node****/
-int masterPart(int noProcesses, int processId, int size, int partLength, float *numberPart) //MASTER NODE CODE
+float masterPart(int noProcesses, int processId, int size, int partLength, float *numberPart) //MASTER NODE CODE
 {
-    int elements, i, keepBigSet, sumSets, finalize, median, randomNode, pivot, k, tempPivot;
+    int elements, i, keepBigSet, sumSets, finalize,  randomNode, k;
+    float tempPivot, median, pivot;
     int endSmall = 0;
     int dropoutFlag = 0;
     int endBig = 0;
-    int *arraySmall, *arrayBig, *arrayToUse, *activeNodes;
+    float *arraySmall, *arrayBig, *arrayToUse;
+    int *activeNodes;
     int activeSize = noProcesses;
     int stillActive = 1;
     int oldSumSets = -1;
@@ -264,15 +268,15 @@ int masterPart(int noProcesses, int processId, int size, int partLength, float *
             if (useNewPivot == 0) {
                 srand(time(NULL));
                 pivot = arrayToUse[rand() % elements];
-                MPI_Bcast(&pivot, 1, MPI_INT, 0,
+                MPI_Bcast(&pivot, 1, MPI_FLOAT, 0,
                           MPI_COMM_WORLD); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
             } else {
-                MPI_Bcast(&tempPivot, 1, MPI_INT, 0,
+                MPI_Bcast(&tempPivot, 1, MPI_FLOAT, 0,
                           MPI_COMM_WORLD); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
                 pivot = tempPivot;
             }
         } else //If not.. wait for the pivot to be received.
-            MPI_Bcast(&pivot, 1, MPI_INT, randomNode, MPI_COMM_WORLD);  // SECOND BROADCAST : RECEIVING PIVOT
+            MPI_Bcast(&pivot, 1, MPI_FLOAT, randomNode, MPI_COMM_WORLD);  // SECOND BROADCAST : RECEIVING PIVOT
         if (stillActive == 1)  //If i still have values in my array.. proceed
         {
             partition(arrayToUse, elements, pivot, &arraySmall, &arrayBig, &endSmall,
