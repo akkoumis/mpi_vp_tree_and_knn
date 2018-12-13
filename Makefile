@@ -11,13 +11,13 @@ CMAIN = ex2
 NPROCS = 1
 
 
-all: mpiFindMedian.o
-	$(ICC) $(ICCFLAGS) $(OPENMPICCFLAGS) $^ -o $(CMAIN)
+all: main.o mpiFindMedian.o
+	$(ICC) $(ICCFLAGS) $^ -o $(CMAIN)
 
+main.o: main.c
+	$(ICC) -c $(ICCFLAGS) $^
 mpiFindMedian.o: mpiFindMedian.c
 	$(ICC) -c $(ICCFLAGS) $^
-#qsort-parallel-cilk.o: qsort-parallel-cilk.c
-#	$(ICC) -c $(ICCFLAGS) $^
 #qsort-parallel-openmp.o: qsort-parallel-openmp.c
 #	$(ICC) -c $(ICCFLAGS) $(OPENMPICCFLAGS) $^
 #qsort-parallel-pthreads.o: qsort-parallel-pthreads.c

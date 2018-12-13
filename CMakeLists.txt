@@ -7,5 +7,5 @@ include_directories(.)
 include_directories(/opt/intel/compilers_and_libraries/linux/mpi/intel64/include)
 
 add_executable(ex2
-        mpiFindMedian.c mpiFindMedian.h)
+        mpiFindMedian.c mpiFindMedian.h main.c)
 target_link_libraries(ex2 ${MPI_C_LIBRARIES})

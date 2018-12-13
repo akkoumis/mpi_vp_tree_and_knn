@@ -5,4 +5,6 @@
 #ifndef EX2_MPIFINDMEDIAN_H
 #define EX2_MPIFINDMEDIAN_H
 
+void mpiFindMedian(int processId, int noProcesses, int size);
+
 #endif //EX2_MPIFINDMEDIAN_H

@@ -34,6 +34,7 @@ SOFTWARE.
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
+#include "mpiFindMedian.h"
 
 MPI_Status Stat;
 
@@ -218,7 +219,7 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
                 lapsed.tv_sec = second.tv_sec - first.tv_sec;
                 printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
                 validation(median, partLength, size, numberPart, processId);
-                MPI_Finalize();
+                //MPI_Finalize();
                 free(pivotArray);
                 return median;
             } else {
@@ -334,7 +335,7 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
             lapsed.tv_sec = second.tv_sec - first.tv_sec;
             printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
             validation(median, partLength, size, numberPart, processId);
-            MPI_Finalize();
+            //MPI_Finalize();
             free(pivotArray);
             return median;
         }
@@ -400,7 +401,7 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
             if (finalize == 1) {
                 int median = 0;
                 validation(median, partLength, size, numberPart, processId);
-                MPI_Finalize();
+                //MPI_Finalize();
                 return;
             } else {
                 MPI_Gather(&useNewPivot, 1, MPI_INT, pivotArray, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -447,7 +448,7 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
         if (finalize == 1) {
             int median = 0;
             validation(median, partLength, size, numberPart, processId);
-            MPI_Finalize();
+            //MPI_Finalize();
             return;
         }
         MPI_Bcast(&keepBigSet, 1, MPI_INT, 0,
@@ -487,15 +488,11 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
 
 
 /*****MAIN!!!!!!!!!!*****/
-int main(int argc, char **argv) {
-    int processId, noProcesses, size, partLength; // Size = # of elems, partLength = length of partition in each process
+void mpiFindMedian(int processId, int noProcesses, int size) {
     float median; // median =
     float *numberPart; // an array with the new numbers of the process
+    int partLength;
 
-    size = atoi(argv[1]); // Gets size from input
-    MPI_Init(&argc, &argv);    /* starts MPI */
-    MPI_Comm_rank(MPI_COMM_WORLD, &processId);    /* get current process id */
-    MPI_Comm_size(MPI_COMM_WORLD, &noProcesses);    /* get number of processes */
     if (processId == 0) {
         // MASTER
         printf("size: %d processes: %d\n", size, noProcesses);
@@ -530,8 +527,8 @@ int main(int argc, char **argv) {
             printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
             printf("Median: %f\n", median);
             free(numberPart);
-            MPI_Finalize();
-            return 0;
+            //MPI_Finalize();
+            return;
         }
     } else {
         // SLAVES
@@ -546,7 +543,7 @@ int main(int argc, char **argv) {
     } else
         slavePart(processId, partLength, numberPart, size);
     free(numberPart);
-    return 0;
+    return;
 }
 
 
