@@ -411,10 +411,10 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
             if (useNewPivot == 0) {
                 srand(time(NULL));
                 pivot = arrayToUse[rand() % elements];
-                MPI_Bcast(&pivot, 1, MPI_INT, processId,
+                MPI_Bcast(&pivot, 1, MPI_FLOAT, processId,
                           MPI_COMM_WORLD); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
             } else {
-                MPI_Bcast(&tempPivot, 1, MPI_INT, processId,
+                MPI_Bcast(&tempPivot, 1, MPI_FLOAT, processId,
                           MPI_COMM_WORLD); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
                 pivot = tempPivot;
             }
@@ -506,8 +506,10 @@ int main(int argc, char **argv) {
                     partLength * sizeof(float)); // Allocate size according to # of elems of master
             generateNumbers(numberPart, partLength, processId); // Populate numberPart with random numbers
         } else {
-            // If its ONLY the master
-            numberPart = (float *) malloc(size * sizeof(float));// Allocate size according to size (total # of elems)
+            // If its ONLY the master, it finds the median by itself
+            // TODO numberPart should be passed to the function
+            numberPart = (float *) malloc(size * sizeof(float));// Allocate size according to total # of elems
+            // TODO generateNumbers will become unnecessary
             generateNumbers(numberPart, size, processId); // Populate numberPart with random numbers
             struct timeval first, second, lapsed;
             struct timezone tzp;
