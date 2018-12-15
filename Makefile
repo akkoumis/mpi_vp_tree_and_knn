@@ -8,7 +8,7 @@ ICCFLAGS = -I /usr/include/x86_64-linux-gnu/c++/8/
 #OPENMPGCCCFLAGS = -fopenmp
 
 CMAIN = ex2
-NPROCS = 1
+NPROCS = 4
 
 
 all: main.o mpiFindMedian.o
@@ -26,7 +26,7 @@ mpiFindMedian.o: mpiFindMedian.c
 #	$(ICC) -c $(ICCFLAGS) $^
 run:	#$(CMAIN).o
 	# mpiexec -machinefile mpd.hosts -n $(NPROCS) ./$(SOURCE).out
-	mpirun -n $(NPROCS) ./$(CMAIN) 512
+	mpirun -n $(NPROCS) ./$(CMAIN)
 
 clean:
 	rm -f *.o *~ $(CMAIN)

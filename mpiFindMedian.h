@@ -5,6 +5,7 @@
 #ifndef EX2_MPIFINDMEDIAN_H
 #define EX2_MPIFINDMEDIAN_H
 
-void mpiFindMedian(int processId, int noProcesses, int size);
+void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
+                   MPI_Comm communicator);
 
 #endif //EX2_MPIFINDMEDIAN_H

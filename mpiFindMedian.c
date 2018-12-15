@@ -488,34 +488,38 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
 
 
 /*****MAIN!!!!!!!!!!*****/
-void mpiFindMedian(int processId, int noProcesses, int size) {
+void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
+                   MPI_Comm communicator) {
     float median; // median =
-    float *numberPart; // an array with the new numbers of the process
+    float *numberPart = distances; // an array with the new numbers of the process
     int partLength;
 
-    if (processId == 0) {
+
+    if (processId == master) {
         // MASTER
-        printf("size: %d processes: %d\n", size, noProcesses);
+        printf("size: %d processes: %d\n", sizeOfArray, noProcesses);
         if (noProcesses > 1) {
             // If there are slaves
-            if (size % noProcesses == 0) // If noProcesses divides size
-                partLength = (size / noProcesses); // The length of the partition is the quotient
-            else
-                partLength = (size / noProcesses) + 1; // The length of the partition is the FLOOR of thes quotient
-            sendLengths(size, noProcesses); // Sends the lengths to the corresponding nodes
-            numberPart = (float *) malloc(
-                    partLength * sizeof(float)); // Allocate size according to # of elems of master
+            if (sizeOfArray % noProcesses == 0) // If noProcesses divides size
+                partLength = (sizeOfArray / noProcesses); // The length of the partition is the quotient
+            else {
+                partLength = (sizeOfArray / noProcesses) + 1; // The length of the partition is the FLOOR of the quotient
+                printf("ERROR: noProcesses doesn't divide size\n");
+            }
+            sendLengths(sizeOfArray, noProcesses); // Sends the lengths to the corresponding nodes
+            numberPart = (float *) malloc(partLength * sizeof(float)); // Allocate size
             generateNumbers(numberPart, partLength, processId); // Populate numberPart with random numbers
         } else {
             // If its ONLY the master, it finds the median by itself
             // TODO numberPart should be passed to the function
-            numberPart = (float *) malloc(size * sizeof(float));// Allocate size according to total # of elems
+            numberPart = (float *) malloc(sizeOfArray * sizeof(float));// Allocate size according to total # of elems
             // TODO generateNumbers will become unnecessary
-            generateNumbers(numberPart, size, processId); // Populate numberPart with random numbers
+            generateNumbers(numberPart, sizeOfArray, processId); // Populate numberPart with random numbers
             struct timeval first, second, lapsed;
             struct timezone tzp;
             gettimeofday(&first, &tzp);
-            median = selection(numberPart, size);
+            printf("Single thread\n");
+            median = selection(numberPart, sizeOfArray);
             gettimeofday(&second, &tzp);
             if (first.tv_usec > second.tv_usec) {
                 second.tv_usec += 1000000;
@@ -523,7 +527,7 @@ void mpiFindMedian(int processId, int noProcesses, int size) {
             }
             lapsed.tv_usec = second.tv_usec - first.tv_usec;
             lapsed.tv_sec = second.tv_sec - first.tv_sec;
-            validationST(median, size, numberPart);
+            validationST(median, sizeOfArray, numberPart);
             printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
             printf("Median: %f\n", median);
             free(numberPart);
@@ -533,17 +537,19 @@ void mpiFindMedian(int processId, int noProcesses, int size) {
     } else {
         // SLAVES
         MPI_Recv(&partLength, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &Stat); // Slaves wait to receive their partLength
-        numberPart = (float *) malloc(
-                partLength * sizeof(float)); // Allocate size according to # of elems of each slave
+        //numberPart = &distances[processId*partLength];
+        numberPart = (float *) malloc(partLength * sizeof(float)); // Allocate size
         generateNumbers(numberPart, partLength, processId); // Populate numberPart with random numbers
     }
-    if (processId == 0) {
-        median = masterPart(noProcesses, processId, size, partLength, numberPart);
+    if (processId == master) {
+        median = masterPart(noProcesses, processId, sizeOfArray, partLength, numberPart);
         printf("Median: %f\n", median);
     } else
-        slavePart(processId, partLength, numberPart, size);
+        slavePart(processId, partLength, numberPart, sizeOfArray);
+    MPI_Barrier(MPI_COMM_WORLD);
+
     free(numberPart);
-    return;
+    //return;
 }
 
 
@@ -650,6 +656,7 @@ float selection(float *array, int number) {
             break;
         }
     }
+    //printf("Selection ending...");
     return median;
 }
 
