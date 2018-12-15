@@ -8,3 +8,5 @@ mpiFindMedian
 *.o
 
 *.pdf
+
+cities\.txt
