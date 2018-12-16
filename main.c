@@ -11,9 +11,10 @@
 int main(int argc, char **argv) {
 
     int processID, noProcesses, size, loop, master, groups; // Size = # of elems, partLength = length of partition in each process
-    float distances[16] = {1987.625, 1226.345, 1990.625, 9256.975, 15846.75, 18799.0,
+    /*float distances[16] = {1987.625, 1226.345, 1990.625, 9256.975, 15846.75, 18799.0,
                            4545.875, 17029.75, 5136.125, 19161.75, 1099.545, 7943.25,
-                           435035.0, 676696.5, 10271.04, 992468.5};
+                           435035.0, 676696.5, 10271.04, 992468.5};*/
+    float *distances;
     size = 16;
 
     /*srand((processID + 1) * time(NULL));
@@ -28,17 +29,23 @@ int main(int argc, char **argv) {
 
     groups = 2;
     loop = 0;
-    noProcesses = noProcesses / groups; //
-    size = size / groups; // /2
+    noProcesses = noProcesses / groups; // No of processes per group
+    size = size / groups; // Size of the array for each group
     master = processID / noProcesses; // Integer division <=> Floor, for positives
     master = master * groups;// Calculate the master of the process
-    printf("My Master is = %d\n",master);
+    printf("My Master is = %d\n", master);
 
     MPI_Comm communicator[1];
     MPI_Comm_split(MPI_COMM_WORLD, master, 0, communicator);
+
+    distances = (float *) malloc((size / noProcesses) * sizeof(float));
+    generateNumbers(distances, size / noProcesses, processID);
+
     mpiFindMedian(processID, master, noProcesses, size, distances, loop, communicator);
 
-    MPI_Barrier(MPI_COMM_WORLD);
+    free(distances);
+
+    //MPI_Barrier(MPI_COMM_WORLD);
 
     MPI_Finalize();
 

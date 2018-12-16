@@ -495,7 +495,7 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
 void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
                    MPI_Comm *communicator) {
     float median; // median =
-    float *numberPart = distances; // an array with the new numbers of the process
+    //float *numberPart = distances;  an array with the new numbers of the process
     int partLength;
     comm = communicator;
 
@@ -519,19 +519,19 @@ void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, 
             }
             sendLengths(sizeOfArray, noProcesses); // Sends the lengths to the corresponding nodes
             //printf("Master length = %d\n", partLength);
-            numberPart = (float *) malloc(partLength * sizeof(float)); // Allocate size
-            generateNumbers(numberPart, partLength, master); // Populate numberPart with random numbers
+            //numberPart = (float *) malloc(partLength * sizeof(float)); // Allocate size
+            //generateNumbers(numberPart, partLength, master); // Populate numberPart with random numbers
         } else {
             // If its ONLY the master, it finds the median by itself
             // TODO numberPart should be passed to the function
-            numberPart = (float *) malloc(sizeOfArray * sizeof(float));// Allocate size according to total # of elems
+            //numberPart = (float *) malloc(sizeOfArray * sizeof(float));// Allocate size according to total # of elems
             // TODO generateNumbers will become unnecessary
-            generateNumbers(numberPart, sizeOfArray, master); // Populate numberPart with random numbers
+            //generateNumbers(numberPart, sizeOfArray, master); // Populate numberPart with random numbers
             struct timeval first, second, lapsed;
             struct timezone tzp;
             gettimeofday(&first, &tzp);
             printf("Single thread\n");
-            median = selection(numberPart, sizeOfArray);
+            median = selection(distances, sizeOfArray);
             gettimeofday(&second, &tzp);
             if (first.tv_usec > second.tv_usec) {
                 second.tv_usec += 1000000;
@@ -539,10 +539,10 @@ void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, 
             }
             lapsed.tv_usec = second.tv_usec - first.tv_usec;
             lapsed.tv_sec = second.tv_sec - first.tv_sec;
-            validationST(median, sizeOfArray, numberPart);
+            validationST(median, sizeOfArray, distances);
             printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
             printf("Median: %f\n", median);
-            free(numberPart);
+            //free(distances);
             //MPI_Finalize();
             return;
         }
@@ -551,17 +551,17 @@ void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, 
         MPI_Recv(&partLength, 1, MPI_INT, 0, 1, *comm, &Stat); // Slaves wait to receive their partLength
         //printf("Received length = %d to node %d\n", partLength, processId);
         //numberPart = &distances[processId*partLength];
-        numberPart = (float *) malloc(partLength * sizeof(float)); // Allocate size
-        generateNumbers(numberPart, partLength, master); // Populate numberPart with random numbers
+        //numberPart = (float *) malloc(partLength * sizeof(float)); // Allocate size
+        //generateNumbers(numberPart, partLength, master); // Populate numberPart with random numbers
     }
     if (processId == 0) {
-        median = masterPart(noProcesses, processId, sizeOfArray, partLength, numberPart);
+        median = masterPart(noProcesses, processId, sizeOfArray, partLength, distances);
         printf("Median: %f\n", median);
     } else
-        slavePart(processId, partLength, numberPart, sizeOfArray);
+        slavePart(processId, partLength, distances, sizeOfArray);
     MPI_Barrier(*comm);
 
-    free(numberPart);
+    //free(distances);
     //return;
 }
 
