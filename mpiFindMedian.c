@@ -63,6 +63,7 @@ void removeElement(int *array, int *size, int element) {
 void sendLengths(int size, int noProcesses) {
     int i, partLength;
     if (size % noProcesses != 0) { // If noProcesses divides size
+        printf("ERROR: noProcesses doesn't divide size\n");
         int left = size - (size / noProcesses) * noProcesses;  //Split the size in as close to equal as possible parts
         partLength = (size / noProcesses) + 1;
         for (i = 1; i < left; i++)      //start from 1 because we create the zero one through the main function
@@ -492,8 +493,8 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
 
 
 /*****MAIN!!!!!!!!!!*****/
-void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
-                   MPI_Comm *communicator) {
+float mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
+                    MPI_Comm *communicator) {
     float median; // median =
     //float *numberPart = distances;  an array with the new numbers of the process
     int partLength;
@@ -544,7 +545,7 @@ void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, 
             printf("Median: %f\n", median);
             //free(distances);
             //MPI_Finalize();
-            return;
+            return median;
         }
     } else {
         // SLAVES
@@ -557,9 +558,15 @@ void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, 
     if (processId == 0) {
         median = masterPart(noProcesses, processId, sizeOfArray, partLength, distances);
         printf("Median: %f\n", median);
-    } else
+        for (int i = 1; i < noProcesses; i++)
+            MPI_Send(&median, 1, MPI_FLOAT, i, 2, *comm);
+        return median;
+    } else {
         slavePart(processId, partLength, distances, sizeOfArray);
-    MPI_Barrier(*comm);
+        MPI_Recv(&median,1,MPI_FLOAT,0,2,*comm,&Stat);
+        return median;
+    }
+    //MPI_Barrier(*comm);
 
     //free(distances);
     //return;

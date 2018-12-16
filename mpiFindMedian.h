@@ -9,7 +9,7 @@
 
 void generateNumbers(float *numberPart, int partLength, int processID);
 
-void mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
-                   MPI_Comm *communicator);
+float mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
+                    MPI_Comm *communicator);
 
 #endif //EX2_MPIFINDMEDIAN_H

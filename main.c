@@ -41,11 +41,12 @@ int main(int argc, char **argv) {
     distances = (float *) malloc((size / noProcesses) * sizeof(float));
     generateNumbers(distances, size / noProcesses, processID);
 
-    mpiFindMedian(processID, master, noProcesses, size, distances, loop, communicator);
+    float median = mpiFindMedian(processID, master, noProcesses, size, distances, loop, communicator);
 
     free(distances);
 
     //MPI_Barrier(MPI_COMM_WORLD);
+    //printf("Main Median = %f\n",median);
 
     MPI_Finalize();
 
