@@ -493,8 +493,7 @@ void slavePart(int processId, int partLength, float *numberPart, int size)  //co
 
 
 /*****MAIN!!!!!!!!!!*****/
-float mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray, float *distances, int loop,
-                    MPI_Comm *communicator) {
+float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *distances, MPI_Comm *communicator) {
     float median; // median =
     //float *numberPart = distances;  an array with the new numbers of the process
     int partLength;
@@ -559,11 +558,12 @@ float mpiFindMedian(int processId, int master, int noProcesses, int sizeOfArray,
         median = masterPart(noProcesses, processId, sizeOfArray, partLength, distances);
         printf("Median: %f\n", median);
         for (int i = 1; i < noProcesses; i++)
-            MPI_Send(&median, 1, MPI_FLOAT, i, 2, *comm);
+            MPI_Send(&median, 1, MPI_FLOAT, i, 2, *comm); // TAG 2 = MEDIAN
         return median;
     } else {
         slavePart(processId, partLength, distances, sizeOfArray);
-        MPI_Recv(&median,1,MPI_FLOAT,0,2,*comm,&Stat);
+        MPI_Recv(&median, 1, MPI_FLOAT, 0, 2, *comm, &Stat);
+        //printf("Median: %f\n", median);
         return median;
     }
     //MPI_Barrier(*comm);

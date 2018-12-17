@@ -10,3 +10,7 @@ mpiFindMedian
 *.pdf
 
 cities\.txt
+
+*.xlsx
+
+cities_original\.txt
