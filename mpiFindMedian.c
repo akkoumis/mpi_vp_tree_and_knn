@@ -499,13 +499,15 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
     int partLength;
     comm = communicator;
 
-    MPI_Comm_rank(*comm, &processId);    /* get current process id */
+    int pid = processId;
+    MPI_Comm_rank(*comm, &pid);    /* get current process id */
 
-    printf("ProcessID = %d\n", processId);
-    //if (processId < 2)
+    //printf("ProcessID = %d\n", pid);
+
+    //if (pid < 2)
     //   return;
 
-    if (processId == 0) {
+    if (pid == 0) {
         // MASTER
         printf("size: %d processes: %d\n", sizeOfArray, noProcesses);
         if (noProcesses > 1) {
@@ -549,19 +551,19 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
     } else {
         // SLAVES
         MPI_Recv(&partLength, 1, MPI_INT, 0, 1, *comm, &Stat); // Slaves wait to receive their partLength
-        //printf("Received length = %d to node %d\n", partLength, processId);
-        //numberPart = &distances[processId*partLength];
+        //printf("Received length = %d to node %d\n", partLength, pid);
+        //numberPart = &distances[pid*partLength];
         //numberPart = (float *) malloc(partLength * sizeof(float)); // Allocate size
         //generateNumbers(numberPart, partLength, master); // Populate numberPart with random numbers
     }
-    if (processId == 0) {
-        median = masterPart(noProcesses, processId, sizeOfArray, partLength, distances);
+    if (pid == 0) {
+        median = masterPart(noProcesses, pid, sizeOfArray, partLength, distances);
         printf("Median: %f\n", median);
         for (int i = 1; i < noProcesses; i++)
             MPI_Send(&median, 1, MPI_FLOAT, i, 2, *comm); // TAG 2 = MEDIAN
         return median;
     } else {
-        slavePart(processId, partLength, distances, sizeOfArray);
+        slavePart(pid, partLength, distances, sizeOfArray);
         MPI_Recv(&median, 1, MPI_FLOAT, 0, 2, *comm, &Stat);
         //printf("Median: %f\n", median);
         return median;

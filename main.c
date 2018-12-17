@@ -15,10 +15,16 @@ struct point {
 
 typedef struct point point;
 
+float calculateDistanct(point origin, point end) {
+    float x2 = powf(origin.x - end.x, 2);
+    float y2 = powf(origin.y - end.y, 2);
+    return sqrt(x2 + y2);
+}
+
 int main(int argc, char **argv) {
 
-    int processID, noProcesses;
-    int totalSize, perProcessSize, loop, master, groups; // Size = # of elems
+    int processID, noProcesses, noTotalProcesses;
+    int totalSize, perProcessSize, loop, master, groups, perGroupSize; // Size = # of elems
 
     float *distances;
     point *points;
@@ -26,8 +32,8 @@ int main(int argc, char **argv) {
 
     MPI_Init(&argc, &argv);    /* starts MPI */
     MPI_Comm_rank(MPI_COMM_WORLD, &processID);    /* get current process id */
-    MPI_Comm_size(MPI_COMM_WORLD, &noProcesses);    /* get number of processes */
-    perProcessSize = totalSize / noProcesses;
+    MPI_Comm_size(MPI_COMM_WORLD, &noTotalProcesses);    /* get total number of processes */
+    perProcessSize = totalSize / noTotalProcesses;
 
     /* create a type for struct point */
     const int nitems = 2;
@@ -47,7 +53,7 @@ int main(int argc, char **argv) {
     FILE *fp;
     char buff[255], buff2[255];
 
-    long int offset = ((long int) perProcessSize) * 2 * processID; // *2 because x and y are on different lines
+    long int offset = ((long int) perProcessSize) * 2 * processID; // *2 -> because x and y are on different lines
     fp = fopen("cities.txt", "r");
     for (long int i = 0; i < offset; ++i) {
         fscanf(fp, "%s", buff); // Moving stream according to offset
@@ -56,7 +62,7 @@ int main(int argc, char **argv) {
     points = (point *) malloc(perProcessSize * sizeof(point));
     distances = (float *) malloc(perProcessSize * sizeof(float));
 
-    for (int i = 0; i < totalSize / noProcesses; ++i) {
+    for (int i = 0; i < perProcessSize; ++i) {
         fscanf(fp, "%s", buff);
         points[i].x = atof(buff);
         fscanf(fp, "%s", buff2);
@@ -70,11 +76,11 @@ int main(int argc, char **argv) {
     for (loop = 0; loop < 1; ++loop) {
         groups = (int) pow(2, loop);
         //printf("Groups = %d\n", groups);
-        noProcesses = noProcesses / groups; // No of processes per group
-        totalSize = totalSize / groups; // Size of the array for each group
+        noProcesses = noTotalProcesses / groups; // No of processes per group
+        perGroupSize = totalSize / groups; // Size of the array for each group
         master = processID / noProcesses; // Integer division <=> Floor, for positives
-        master = master * groups;// Calculate the master of the process
         //printf("My Master is = %d\n", master);
+        master = master * groups;// Calculate the master of the process
 
         MPI_Comm communicator[1];
         MPI_Comm_split(MPI_COMM_WORLD, master, 0, communicator);
@@ -84,13 +90,15 @@ int main(int argc, char **argv) {
             vp.x = points[0].x;
             vp.y = points[0].y;
         }
-        MPI_Bcast(&vp, 1, mpi_point_type, 0, *communicator);
-        printf("%d:\tx = %f\ty = %f\n", processID, vp.x, vp.y);
+        MPI_Bcast(&vp, 1, mpi_point_type, 0, *communicator); // printf("%d:\tx = %f\ty = %f\n", processID, vp.x, vp.y);
 
-        distances = (float *) malloc((totalSize / noProcesses) * sizeof(float));
-        generateNumbers(distances, totalSize / noProcesses, processID);
-
-        //float median = mpiFindMedian(processID, noProcesses, size, distances, communicator);
+        distances = (float *) malloc((perProcessSize) * sizeof(float));
+        for (int i = 0; i < perProcessSize; ++i) {
+            distances[i] = calculateDistanct(vp, points[i]);
+            //printf("Distance to %d:\t%f\n", processID * perProcessSize + i + 1, distances[i]);
+        }
+        MPI_Barrier(*communicator);
+        float median = mpiFindMedian(processID, noProcesses, perGroupSize, distances, communicator);
     }
     free(distances);
 
