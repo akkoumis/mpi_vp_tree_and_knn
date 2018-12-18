@@ -67,23 +67,27 @@ int main(int argc, char **argv) {
         points[i].x = atof(buff);
         fscanf(fp, "%s", buff2);
         points[i].y = atof(buff2);
-        printf("%ld:\t%f\t%f\n", offset / 2 + i + 1, points[i].x, points[i].y);
+        //printf("%ld:\t%f\t%f\n", offset / 2 + i + 1, points[i].x, points[i].y);
     }
     fclose(fp);
 
+    MPI_Comm communicator[1];
 
     //int loopend = log2(noProcesses);
-    for (loop = 0; loop < 1; ++loop) {
-        groups = (int) pow(2, loop);
+    for (loop = 3; loop <= 3; ++loop) {
+        groups = (int) pow(2, loop); //number of groups
         //printf("Groups = %d\n", groups);
         noProcesses = noTotalProcesses / groups; // No of processes per group
         perGroupSize = totalSize / groups; // Size of the array for each group
         master = processID / noProcesses; // Integer division <=> Floor, for positives
+        master = master * noProcesses;// Calculate the master of the process
         //printf("My Master is = %d\n", master);
-        master = master * groups;// Calculate the master of the process
 
-        MPI_Comm communicator[1];
+        //printf("Pid = %d.\tCommunicator = %d.\n", processID, *communicator);
+        //MPI_Barrier(MPI_COMM_WORLD);
         MPI_Comm_split(MPI_COMM_WORLD, master, 0, communicator);
+        //if(processID==1)
+        //printf("Pid = %d.\tCommunicator = %d.\n", processID, *communicator);
 
         point vp;
         if (processID == 0) {
@@ -97,8 +101,19 @@ int main(int argc, char **argv) {
             distances[i] = calculateDistanct(vp, points[i]);
             //printf("Distance to %d:\t%f\n", processID * perProcessSize + i + 1, distances[i]);
         }
+
         MPI_Barrier(*communicator);
         float median = mpiFindMedian(processID, noProcesses, perGroupSize, distances, communicator);
+/*
+        int countLessEqual = 0, countGreater = 0;
+
+        for (int j = 0; j < perProcessSize; ++j) {
+            if(distances[j]<=median)
+                countLessEqual++;
+            else
+                countGreater++;
+        }*/
+
     }
     free(distances);
 

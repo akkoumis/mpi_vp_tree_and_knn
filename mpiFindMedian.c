@@ -181,6 +181,7 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
             noProcesses * sizeof(int));  //Used for special occasions to gather values different than the pivot.
     for (i = 0; i < activeSize; i++) {
         activeNodes[i] = i;
+        //printf("activeNodes[%d] = %d\n", i, i);
     }
     int randomCounter = 0;
     int randomCounter2 = 0;
@@ -255,15 +256,18 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
                     useNewPivot = 0;
             }
         }
-        if (useNewPivot != 0)
-            MPI_Bcast(&randomNode, 1, MPI_INT, 0,
-                      *comm);  //THIRD(OPTIONAL) BROADCAST : BROADCAST THE SPECIAL NODE
-        if (useNewPivot ==
-            0)  //if we didnt choose a special Node, choose the node that will pick the pivot in a clockwise manner. Only selects one of the active nodes.
+        if (useNewPivot != 0) {
+            MPI_Bcast(&randomNode, 1, MPI_INT, 0, *comm);  //THIRD(OPTIONAL) BROADCAST : BROADCAST THE SPECIAL NODE
+        }
+        if (useNewPivot == 0)
+            //if we didnt choose a special Node, choose the node that will pick the pivot in a clockwise manner. Only selects one of the active nodes.
         {
             if (randomCounter >= activeSize)
                 randomCounter = 0; //Fail safe
             randomNode = activeNodes[randomCounter];
+            //printf("activeNodes[%d] = %d\n", randomCounter, activeNodes[randomCounter]);
+            //printf("Random counter1: %d\n", randomCounter);
+            //printf("Random node1: %d\n", randomNode);
             randomCounter++;            //Increase the counter
             MPI_Bcast(&randomNode, 1, MPI_INT, 0,
                       *comm);   //FIRST BROADCAST : SENDING randomnode, who will chose
@@ -273,15 +277,15 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
             if (useNewPivot == 0) {
                 srand(time(NULL));
                 pivot = arrayToUse[rand() % elements];
-                MPI_Bcast(&pivot, 1, MPI_FLOAT, 0,
-                          *comm); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
+                MPI_Bcast(&pivot, 1, MPI_FLOAT, 0, *comm); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
             } else {
-                MPI_Bcast(&tempPivot, 1, MPI_FLOAT, 0,
-                          *comm); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
+                MPI_Bcast(&tempPivot, 1, MPI_FLOAT, 0, *comm); //SECOND BROADCAST : SENDING PIVOT   k ton stelnw sto lao
                 pivot = tempPivot;
             }
-        } else //If not.. wait for the pivot to be received.
+        } else { //If not.. wait for the pivot to be received.
+            printf("Random node: %d\n", randomNode);
             MPI_Bcast(&pivot, 1, MPI_FLOAT, randomNode, *comm);  // SECOND BROADCAST : RECEIVING PIVOT
+        }
         if (stillActive == 1)  //If i still have values in my array.. proceed
         {
             partition(arrayToUse, elements, pivot, &arraySmall, &arrayBig, &endSmall,
@@ -347,18 +351,19 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
         MPI_Bcast(&finalize, 1, MPI_INT, 0, *comm);    //SECOND BROADCAST : WAIT FOR FINALIZE COMMAND OR NOT
         //edw tous stelnw to keepbigset gia na doun ti tha dialeksoun
         MPI_Bcast(&keepBigSet, 1, MPI_INT, 0, *comm);    //THIRD BROADCAST: SEND keepBigset boolean
-        if (dropoutFlag == 1 && stillActive ==
-                                1) //edw sumfwna me to dropoutflag pou orisame prin an einai 1 kalw tin sinartisi pou me petaei apo ton pinaka. episis koitaw na eimai active gt an me exei idi petaksei se proigoumeni epanalispi tote den xreiazetai na me ksanapetaksei
+        if (dropoutFlag == 1 && stillActive == 1)
+            //edw sumfwna me to dropoutflag pou orisame prin an einai 1 kalw tin sinartisi pou me petaei apo ton pinaka. episis koitaw na eimai active gt an me exei idi petaksei se proigoumeni epanalispi tote den xreiazetai na me ksanapetaksei
         {
             stillActive = 0;
+            printf("activeSize = %d\n", activeSize);
+
             removeElement(activeNodes, &activeSize, 0);
         }
         int flag;
         //edw perimenw na akousw apo ton kathena an sunexizei active h oxi.. an oxi ton petaw.. an einai idi inactive apo prin stelnei kati allo (oxi 1)k den ton ksanapetaw
         for (i = 0; i < activeSize; i++) {
             if (activeNodes[i] != 0) {
-                MPI_Recv(&flag, 1, MPI_INT, activeNodes[i], 1, *comm,
-                         &Stat);  //FIRST RECEIVE : RECEIVE active or not
+                MPI_Recv(&flag, 1, MPI_INT, activeNodes[i], 1, *comm, &Stat);  //FIRST RECEIVE : RECEIVE active or not
                 if (flag == 1)
                     removeElement(activeNodes, &activeSize, activeNodes[i]);
             }
@@ -502,10 +507,12 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
     int pid = processId;
     MPI_Comm_rank(*comm, &pid);    /* get current process id */
 
-    //printf("ProcessID = %d\n", pid);
 
-    //if (pid < 2)
-    //   return;
+    /*int temp;
+    MPI_Comm_size(*comm, &temp);
+    printf("ProcessID = %d\t noProcesses = %d.\n", pid, temp);
+    if (processId >= 2)
+        return 0;*/
 
     if (pid == 0) {
         // MASTER
