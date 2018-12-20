@@ -15,19 +15,22 @@ struct point {
 
 typedef struct point point;
 
-float calculateDistanct(point origin, point end) {
-    float x2 = powf(origin.x - end.x, 2);
-    float y2 = powf(origin.y - end.y, 2);
-    return sqrt(x2 + y2);
+float calculateDistance(float *origin, float *end, int dimension) {
+    float sum = 0;
+    for (int i = 0; i < dimension; ++i) {
+        sum += powf(origin[i] - end[i], 2);
+    }
+    return sqrt(sum);
 }
 
 int main(int argc, char **argv) {
     MPI_Status Stat;
 
+    int d = 2;
     int processID, pid, noProcesses, noTotalProcesses;
     int totalSize, perProcessSize, loop, master, groups, perGroupSize; // Size = # of elems
 
-    float *distances;
+    float *distances, **pointsCoordinates;
     point *points;
     totalSize = 16;
 
@@ -44,9 +47,9 @@ int main(int argc, char **argv) {
     MPI_Aint offsets[2];
 
     offsets[0] = offsetof(
-            struct point, x);
+    struct point, x);
     offsets[1] = offsetof(
-            struct point, y);
+    struct point, y);
 
     MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_point_type);
     MPI_Type_commit(&mpi_point_type);
@@ -62,14 +65,18 @@ int main(int argc, char **argv) {
         fscanf(fp, "%s", buff); // Moving stream according to offset
     }
 
-    points = (point *) malloc(perProcessSize * sizeof(point));
+    //points = (point *) malloc(perProcessSize * sizeof(point));
     distances = (float *) malloc(perProcessSize * sizeof(float));
+    pointsCoordinates = (float **) malloc(perProcessSize * sizeof(float *));
+    for (int k = 0; k < perProcessSize; ++k) {
+        pointsCoordinates[k] = (float *) malloc(d * sizeof(float));
+    }
 
     for (int i = 0; i < perProcessSize; ++i) {
-        fscanf(fp, "%s", buff);
-        points[i].x = atof(buff);
-        fscanf(fp, "%s", buff2);
-        points[i].y = atof(buff2);
+        for (int j = 0; j < d; ++j) {
+            fscanf(fp, "%s", buff2);
+            pointsCoordinates[i][j] = atof(buff2);
+        }
         //printf("%ld:\t%f\t%f\n", offset / 2 + i + 1, points[i].x, points[i].y);
     }
     fclose(fp);
@@ -89,21 +96,23 @@ int main(int argc, char **argv) {
         //printf("Pid = %d.\tCommunicator = %d.\n", processID, *communicator);
         //MPI_Barrier(MPI_COMM_WORLD);
         MPI_Comm_split(MPI_COMM_WORLD, master, 0, communicator);
-        MPI_Comm_rank(MPI_COMM_WORLD, &pid);
+        MPI_Comm_rank(*communicator, &pid);
         //if(processID==1)
         //printf("Pid = %d.\tCommunicator = %d.\n", processID, *communicator);
 
 
-        point vp;
+        //point vp;
+        float vp[d];
         if (pid == 0) {
-            vp.x = points[0].x;
-            vp.y = points[0].y;
+            for (int i = 0; i < d; ++i) {
+                vp[i] = pointsCoordinates[0][i]; // TODO Select random instead of the first one
+            }
         }
-        MPI_Bcast(&vp, 1, mpi_point_type, 0, *communicator); // printf("%d:\tx = %f\ty = %f\n", processID, vp.x, vp.y);
+        MPI_Bcast(&vp, d, MPI_FLOAT, 0, *communicator); // printf("%d:\tx = %f\ty = %f\n", processID, vp.x, vp.y);
 
         distances = (float *) malloc((perProcessSize) * sizeof(float));
         for (int i = 0; i < perProcessSize; ++i) {
-            distances[i] = calculateDistanct(vp, points[i]);
+            distances[i] = calculateDistance(vp, pointsCoordinates[i], d);
             //printf("Distance to %d:\t%f\n", processID * perProcessSize + i + 1, distances[i]);
         }
 
