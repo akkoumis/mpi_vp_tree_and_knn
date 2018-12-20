@@ -125,9 +125,9 @@ void validation(float median, int partLength, int size, float *numberPart, int p
             printf("VALIDATION FAILED!\n");
 
 
-        printf("Values greater than median: %d\n", sumMax);
+        /*printf("Values greater than median: %d\n", sumMax);
         printf("Values equal to median: %d\n", sumEq);
-        printf("Values lower than median: %d\n", sumMin);
+        printf("Values lower than median: %d\n", sumMin);*/
     }
 
 }
@@ -152,9 +152,9 @@ void validationST(float median, int size, float *numberPart) {
     else
         printf("VALIDATION FAILED!\n");
 
-    printf("Values greater than median: %d\n", countMax);
+    /*printf("Values greater than median: %d\n", countMax);
     printf("Values equal to median: %d\n", countEq);
-    printf("Values lower than median: %d\n", countMin);
+    printf("Values lower than median: %d\n", countMin);*/
 }
 
 /****Part executed only by the Master Node****/
@@ -222,7 +222,7 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
                 }
                 lapsed.tv_usec = second.tv_usec - first.tv_usec;
                 lapsed.tv_sec = second.tv_sec - first.tv_sec;
-                printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
+                //printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
                 validation(median, partLength, size, numberPart, processId);
                 //MPI_Finalize();
                 free(pivotArray);
@@ -283,7 +283,7 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
                 pivot = tempPivot;
             }
         } else { //If not.. wait for the pivot to be received.
-            printf("Random node: %d\n", randomNode);
+            //printf("Random node: %d\n", randomNode);
             MPI_Bcast(&pivot, 1, MPI_FLOAT, randomNode, *comm);  // SECOND BROADCAST : RECEIVING PIVOT
         }
         if (stillActive == 1)  //If i still have values in my array.. proceed
@@ -355,7 +355,7 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
             //edw sumfwna me to dropoutflag pou orisame prin an einai 1 kalw tin sinartisi pou me petaei apo ton pinaka. episis koitaw na eimai active gt an me exei idi petaksei se proigoumeni epanalispi tote den xreiazetai na me ksanapetaksei
         {
             stillActive = 0;
-            printf("activeSize = %d\n", activeSize);
+            //printf("activeSize = %d\n", activeSize);
 
             removeElement(activeNodes, &activeSize, 0);
         }
@@ -516,7 +516,7 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
 
     if (pid == 0) {
         // MASTER
-        printf("size: %d processes: %d\n", sizeOfArray, noProcesses);
+        //printf("size: %d processes: %d\n", sizeOfArray, noProcesses);
         if (noProcesses > 1) {
             // If there are slaves
             if (sizeOfArray % noProcesses == 0) // If noProcesses divides size
@@ -539,7 +539,7 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
             struct timeval first, second, lapsed;
             struct timezone tzp;
             gettimeofday(&first, &tzp);
-            printf("Single thread\n");
+            //printf("Single thread\n");
             median = selection(distances, sizeOfArray);
             gettimeofday(&second, &tzp);
             if (first.tv_usec > second.tv_usec) {
@@ -549,7 +549,7 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
             lapsed.tv_usec = second.tv_usec - first.tv_usec;
             lapsed.tv_sec = second.tv_sec - first.tv_sec;
             validationST(median, sizeOfArray, distances);
-            printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
+            //printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
             printf("Median: %f\n", median);
             //free(distances);
             //MPI_Finalize();

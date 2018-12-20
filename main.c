@@ -22,8 +22,9 @@ float calculateDistanct(point origin, point end) {
 }
 
 int main(int argc, char **argv) {
+    MPI_Status Stat;
 
-    int processID, noProcesses, noTotalProcesses;
+    int processID, pid, noProcesses, noTotalProcesses;
     int totalSize, perProcessSize, loop, master, groups, perGroupSize; // Size = # of elems
 
     float *distances;
@@ -42,8 +43,10 @@ int main(int argc, char **argv) {
     MPI_Datatype mpi_point_type;
     MPI_Aint offsets[2];
 
-    offsets[0] = offsetof(struct point, x);
-    offsets[1] = offsetof(struct point, y);
+    offsets[0] = offsetof(
+            struct point, x);
+    offsets[1] = offsetof(
+            struct point, y);
 
     MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_point_type);
     MPI_Type_commit(&mpi_point_type);
@@ -74,7 +77,7 @@ int main(int argc, char **argv) {
     MPI_Comm communicator[1];
 
     //int loopend = log2(noProcesses);
-    for (loop = 3; loop <= 3; ++loop) {
+    for (loop = 0; loop <= 0; ++loop) {
         groups = (int) pow(2, loop); //number of groups
         //printf("Groups = %d\n", groups);
         noProcesses = noTotalProcesses / groups; // No of processes per group
@@ -86,11 +89,13 @@ int main(int argc, char **argv) {
         //printf("Pid = %d.\tCommunicator = %d.\n", processID, *communicator);
         //MPI_Barrier(MPI_COMM_WORLD);
         MPI_Comm_split(MPI_COMM_WORLD, master, 0, communicator);
+        MPI_Comm_rank(MPI_COMM_WORLD, &pid);
         //if(processID==1)
         //printf("Pid = %d.\tCommunicator = %d.\n", processID, *communicator);
 
+
         point vp;
-        if (processID == 0) {
+        if (pid == 0) {
             vp.x = points[0].x;
             vp.y = points[0].y;
         }
@@ -103,16 +108,47 @@ int main(int argc, char **argv) {
         }
 
         MPI_Barrier(*communicator);
-        float median = mpiFindMedian(processID, noProcesses, perGroupSize, distances, communicator);
-/*
-        int countLessEqual = 0, countGreater = 0;
+        float median = mpiFindMedian(processID, noProcesses, perGroupSize, distances, communicator); // TODO use pid 1st
 
+        float *lessEqual, *greater;
+        lessEqual = (float *) malloc(perGroupSize * sizeof(float));
+        greater = (float *) malloc(perGroupSize * sizeof(float));
+        int countLessEqual = 0, countGreater = 0;
+        int *countersLE, *countersG;
+
+        // Splits points and calculates the counters.
         for (int j = 0; j < perProcessSize; ++j) {
-            if(distances[j]<=median)
+            if (distances[j] <= median) {
+                lessEqual[countLessEqual] = distances[j];
                 countLessEqual++;
-            else
+            } else {
+                greater[countGreater] = distances[j];
                 countGreater++;
-        }*/
+            }
+        }
+
+        if (pid == 0) {
+            countersLE = (int *) malloc(noProcesses * sizeof(int));
+            countersG = (int *) malloc(noProcesses * sizeof(int));
+            countersLE[0] = countLessEqual;
+            countersG[0] = countGreater;
+            for (int i = 1; i < noProcesses; ++i) {
+                MPI_Recv(&countersLE[i], 1, MPI_INT, i, 3, *communicator, &Stat);
+                MPI_Recv(&countersG[i], 1, MPI_INT, i, 4, *communicator, &Stat);
+            }
+        } else {
+            MPI_Send(&countLessEqual, 1, MPI_INT, 0, 3, *communicator);
+            MPI_Send(&countGreater, 1, MPI_INT, 0, 4, *communicator);
+        }
+        MPI_Barrier(*communicator);
+        printf("ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
+
+        if (pid == 0) {
+            for (int i = 0; i < noProcesses; ++i) {
+                printf("Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
+            }
+        }
+
 
     }
     free(distances);
