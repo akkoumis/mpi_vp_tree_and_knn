@@ -15,10 +15,11 @@ struct point {
 
 typedef struct point point;
 
-void map2dto1d(float **a, float *b, int dimension, int totalData) {
-    for (int i = 0; i < totalData; ++i) {
 
-    }
+int findMin(int a, int b) {
+    if (a < b)
+        return a;
+    return b;
 }
 
 float calculateDistance(float *origin, float *end, int dimension) {
@@ -173,7 +174,7 @@ int main(int argc, char **argv) {
             MPI_Send(&countGreater, 1, MPI_INT, 0, 4, *communicator);
         }
         MPI_Barrier(*communicator);
-        printf("ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
+        printf("(BEFORE) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
         MPI_Barrier(*communicator); // TODO Remove this. It's only for show.
 
         int status = 0, *directions;
@@ -183,32 +184,99 @@ int main(int argc, char **argv) {
             // MASTER: Swapping
             // Print state before swapping
             for (int i = 0; i < noProcesses; ++i) {
-                printf("Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
+                printf("(BEFORE) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
             }
-            int indexLE = 0, indexG = noProcesses / 2;
-            /*while (checkStatuses(statuses, noProcesses) == 0) { // While there are processes to be done.
-                int *counterToBeZeroLE = (pid < noProcesses / 2) ? &countersG[indexLE] : &countersLE[indexLE];
-                int *counterToBeMaxLE = (pid < noProcesses / 2) ? &countersLE[indexLE] : &countersG[indexG];
-                int *counterToBeZeroG = (pid < noProcesses / 2) ? &countersG[indexG] : &countersLE[indexLE];
-                int *counterToBeMaxG = (pid < noProcesses / 2) ? &countersLE[indexLE] : &countersG[indexG];
-                if (*counterToBeZero == 0 && *counterToBeMax == perProcessSize){
-                    ch
+            int index1LE = 0, index1G = 0, index2LE = noProcesses / 2, index2G = noProcesses / 2;
+            while (checkStatuses(statuses, noProcesses) == 0) { // While there are processes to be done.
+                // Index1
+                if (countersLE[index1LE] == perProcessSize) {
+                    if (countersG[index1LE] == 0)
+                        statuses[index1LE] = 1;
+                    index1LE++;
                 }
+                if (countersG[index1G] == 0) {
+                    if (countersLE[index1G] == perProcessSize)
+                        statuses[index1G] = 1;
+                    index1G++;
+                }
+                // Index2
+                if (countersLE[index2LE] == 0) {
+                    if (countersG[index2LE] == perProcessSize)
+                        statuses[index2LE] = 1;
+                    index2LE++;
+                }
+                if (countersG[index2G] == perProcessSize) {
+                    if (countersLE[index2G] == 0)
+                        statuses[index2G] = 1;
+                    index2G++;
+                }
+                // Now we have indices that point to processes with data to be moved.
 
-
-                if (indexLE < noProcesses / 2) {
-                    // Means that we are moving lessEqual elements to the first half
-                    if (statuses[indexLE] == 2) {
-
-                        indexLE++;
+                if (index2LE < noProcesses) { // We have to send LE to 1st subgroup
+                    // At first SEND from index2LE and RECEIVE to index1LE
+                    int LEToFull = perProcessSize - countersLE[index1LE];
+                    int GElems = countersG[index2LE];
+                    int noOfElements = findMin(LEToFull, GElems);
+                    directions[0] = index2LE;
+                    directions[1] = index1LE;
+                    directions[2] = noOfElements;
+                    MPI_Send(directions, 3, MPI_INT, directions[0], 6, *communicator); // Send directions to sender.
+                    if (index1LE == 0) {
+                        // We have to receive as the slaves do
+                        int totalData = directions[2] * d;
+                        // MASTER must RECEIVE
+                        float **dataToReceive = lessEqual;
+                        int *counterToModify = &countLessEqual;
+                        float *arrayToReceive = (float *) malloc(totalData * sizeof(float));
+                        MPI_Recv(arrayToReceive, totalData, MPI_FLOAT, directions[0], 7, *communicator, &mpiStat);
+                        for (int i = 0; i < directions[2]; ++i) {
+                            for (int j = 0; j < d; ++j) {
+                                dataToReceive[*counterToModify + i][j] = arrayToReceive[i * d + j];
+                            }
+                        }
+                        *counterToModify += directions[2];
+                    } else {
+                        // We just send directions to the RECEIVING slave.
+                        MPI_Send(directions, 3, MPI_INT, directions[1], 6, *communicator);
                     }
-                } else {
-                    // Means that we are moving greater elements to the second half
-                    if (statuses[indexG] == 2)
-                        indexG++;
+                    countersLE[index2LE] -= directions[2];
+                    countersLE[index1LE] += directions[2];
+                }
+
+                if (index2G < noProcesses) { // It means that we are not done
+                    // Secondly SEND from index1G and RECEIVE to index2G
+                    int GToFull = perProcessSize - countersG[index2G];
+                    int LEElems = countersG[index1G];
+                    int noOfElements = findMin(GToFull, LEElems);
+                    directions[0] = index1G;
+                    directions[1] = index2G;
+                    directions[2] = noOfElements;
+                    MPI_Send(directions, 3, MPI_INT, directions[1], 6, *communicator); // Send directions to receiver.
+                    if (index1G == 0) {
+                        int totalData = directions[2] * d;
+                        // MASTER must SEND
+                        float **dataToSend = greater;
+                        int *counterToModify = &countGreater;
+                        *counterToModify -= directions[2];
+                        float *arrayToSend = (float *) malloc(totalData * sizeof(float));
+                        for (int i = 0; i < directions[2]; ++i) {
+                            for (int j = 0; j < d; ++j) {
+                                arrayToSend[i * d + j] = dataToSend[*counterToModify + i][j];
+                            }
+                        }
+                        MPI_Send(arrayToSend, totalData, MPI_FLOAT, directions[1], 7, *communicator);
+                    } else {
+                        // We just send directions to the RECEIVING slave.
+                        MPI_Send(directions, 3, MPI_INT, directions[0], 6, *communicator);
+                    }
+                    countersG[index1G] -= directions[2];
+                    countersG[index2G] += directions[2];
                 }
             }
-            directions[0] = 3;
+            for (int i = 0; i < noProcesses; ++i) {
+                printf("(AFTER) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
+            }
+            /*directions[0] = 3;
             directions[1] = 1;
             directions[2] = 1;
             countersG[3] -= 1;
@@ -224,8 +292,9 @@ int main(int argc, char **argv) {
                 //MPI_Recv(&status, 1, MPI_INT, 0, 5, *communicator, &mpiStat);
                 if (*counterToBeZero == 0 && *counterToBeMax == perProcessSize)
                     break;
-                MPI_Recv(directions, 3, MPI_INT, 0, 6, *communicator, &mpiStat);
+                MPI_Recv(directions, 3, MPI_INT, 0, 6, *communicator, &mpiStat); // Receive directions
                 int totalData = directions[2] * d;
+
                 if (directions[0] == pid) {
                     // If this SLAVE must SEND
                     float **dataToSend = (pid < noProcesses / 2) ? greater : lessEqual;
@@ -251,8 +320,8 @@ int main(int argc, char **argv) {
                     }
                     *counterToModify += directions[2];
                 }
-                printf("ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
             }
+            printf("(AFTER) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
         }
 
 
