@@ -131,7 +131,8 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < perProcessSize; ++i) {
             distances[i] = calculateDistance(vp, pointsCoordinates[i], d);
-            //printf("Distance to %d:\t%f\n", processID * perProcessSize + i + 1, distances[i]);
+            printf("Distance to %d (%f,%f):\t%f\n", processID * perProcessSize + i + 1,pointsCoordinates[i][0],pointsCoordinates[i][1],
+                    distances[i]);
         }
 
         MPI_Barrier(*communicator);
@@ -149,10 +150,20 @@ int main(int argc, char **argv) {
         // Splits points and calculates the counters.
         for (int j = 0; j < perProcessSize; ++j) {
             if (distances[j] <= median) {
-                copyPoint(lessEqual[countLessEqual], pointsCoordinates[j], d);
+                //copyPoint(lessEqual[countLessEqual], pointsCoordinates[j], d);
+                for (int i = 0; i < d; ++i) {
+                    lessEqual[countLessEqual][i]=pointsCoordinates[j][i];
+                }
+                printf("Process %d-%d: lessEqual[%d] = %f\t%f\tdist=%f\n", pid,j, countLessEqual, pointsCoordinates[j][0],
+                       pointsCoordinates[j][1],distances[j]);
                 countLessEqual++;
             } else {
-                copyPoint(greater[countGreater], pointsCoordinates[j], d);
+                //copyPoint(greater[countGreater], pointsCoordinates[j], d);
+                for (int i = 0; i < d; ++i) {
+                    greater[countGreater][i]=pointsCoordinates[j][i];
+                }
+                printf("Process %d-%d: greater[%d] = %f\t%f\tdist=%f\n", pid,j, countGreater, pointsCoordinates[countGreater][0],
+                        greater[countGreater][1],distances[j]);
                 countGreater++;
             }
         }
@@ -174,7 +185,7 @@ int main(int argc, char **argv) {
             MPI_Send(&countGreater, 1, MPI_INT, 0, 4, *communicator);
         }
         MPI_Barrier(*communicator);
-        printf("(BEFORE) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
+        //printf("(BEFORE) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
         MPI_Barrier(*communicator); // TODO Remove this. It's only for show.
 
         int status = 0, *directions;
@@ -184,7 +195,7 @@ int main(int argc, char **argv) {
             // MASTER: Swapping
             // Print state before swapping
             for (int i = 0; i < noProcesses; ++i) {
-                printf("(BEFORE) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
+                //printf("(BEFORE) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
             }
             int index1LE = 0, index1G = 0, index2LE = noProcesses / 2, index2G = noProcesses / 2;
             while (checkStatuses(statuses, noProcesses) == 0) { // While there are processes to be done.
@@ -274,7 +285,8 @@ int main(int argc, char **argv) {
                 }
             }
             for (int i = 0; i < noProcesses; ++i) {
-                printf("(AFTER) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
+                //printf("(AFTER) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i],countersG[i]);
+
             }
             /*directions[0] = 3;
             directions[1] = 1;
@@ -301,28 +313,58 @@ int main(int argc, char **argv) {
                     int *counterToModify = (pid < noProcesses / 2) ? &countGreater : &countLessEqual;
                     *counterToModify -= directions[2];
                     float *arrayToSend = (float *) malloc(totalData * sizeof(float));
+                    //printf("SENDING:   pid=%d\t%d->%d\t%d elements from index %d\n", pid, directions[0], directions[1], directions[2],
+                    //       *counterToModify);
                     for (int i = 0; i < directions[2]; ++i) {
                         for (int j = 0; j < d; ++j) {
                             arrayToSend[i * d + j] = dataToSend[*counterToModify + i][j];
                         }
                     }
                     MPI_Send(arrayToSend, totalData, MPI_FLOAT, directions[1], 7, *communicator);
+                    for (int k = 0; k < directions[2]; ++k) {
+                        //printf("SENT: pid=%d\t%f\t%f\n",pid,arrayToSend[k*d+0],arrayToSend[k*d+1]); // CECKED
+                    }
                 } else {
                     // If this SLAVE must RECEIVE
                     float **dataToReceive = (pid < noProcesses / 2) ? lessEqual : greater;
                     int *counterToModify = (pid < noProcesses / 2) ? &countLessEqual : &countGreater;
                     float *arrayToReceive = (float *) malloc(totalData * sizeof(float));
+                    //printf("RECEIVING: pid=%d\t%d->%d\t%d elements to index %d\n", pid, directions[0], directions[1], directions[2],
+                    //       *counterToModify);
                     MPI_Recv(arrayToReceive, totalData, MPI_FLOAT, directions[0], 7, *communicator, &mpiStat);
+                    for (int k = 0; k < directions[2]; ++k) {
+                        //printf("RECV: pid=%d\t%f\t%f\n",pid,arrayToReceive[k*d+0],arrayToReceive[k*d+1]);
+                    }
                     for (int i = 0; i < directions[2]; ++i) {
                         for (int j = 0; j < d; ++j) {
                             dataToReceive[*counterToModify + i][j] = arrayToReceive[i * d + j];
+                            //printf("DATA RECV: pid=%d\t[%d][%d]\t%f\n",pid,*counterToModify + i,j,arrayToReceive[i * d + j]);
                         }
                     }
                     *counterToModify += directions[2];
+                    if (*counterToModify == perProcessSize) {
+                        for (int i = 0; i < perProcessSize; ++i) {
+                            //printf("DATA RECV: pid=%d\t[%d]\t%f\t%f\n", pid, i, dataToReceive[i][0], dataToReceive[i][1]);
+                        }
+                    }
                 }
             }
-            printf("(AFTER) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
         }
+        // Calculates the counters for verification.
+        int tempCountLessEqual = 0, tempCountGreater = 0;
+        for (int j = 0; j < perProcessSize; ++j) {
+            if ((calculateDistance(vp, lessEqual[j], d) <= median) && pid < noProcesses / 2) {
+                //printf("(AFTER) Process %d: lessEqual[%d] = %f\t%f\n", pid, tempCountLessEqual, lessEqual[tempCountLessEqual][0],
+                //       lessEqual[tempCountLessEqual][1]);
+                tempCountLessEqual++;
+            }
+            if ((calculateDistance(vp, greater[j], d) >= median) && pid >= noProcesses / 2) {
+                //printf("(AFTER) Process %d: greater[%d] = %f\t%f\n", pid, tempCountGreater, greater[tempCountGreater][0],
+                //       lessEqual[tempCountGreater][1]);
+                tempCountGreater++;
+            }
+        }
+        //printf("(AFTER) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, tempCountLessEqual, tempCountGreater);
 
 
     }
