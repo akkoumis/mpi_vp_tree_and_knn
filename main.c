@@ -22,12 +22,14 @@ int findMin(int a, int b) {
     return b;
 }
 
-float calculateDistance(float *origin, float *end, int dimension) {
+float calculateDistance(const float *origin, const float *end, int dimension) {
     float sum = 0;
     for (int i = 0; i < dimension; ++i) {
         sum += powf(origin[i] - end[i], 2);
     }
-    return sqrt(sum);
+    float res = sqrt(sum);
+    //printf("Distance to (%f,%f):\t%f\n", end[0], end[1], res);
+    return res;
 }
 
 void copyPoint(float *new, float *old, int dimension) {
@@ -86,6 +88,7 @@ int main(int argc, char **argv) {
 
     //points = (point *) malloc(perProcessSize * sizeof(point));
     distances = (float *) malloc(perProcessSize * sizeof(float));
+    float *tempDistances = (float *) malloc(perProcessSize * sizeof(float));
     pointsCoordinates = (float **) malloc(perProcessSize * sizeof(float *));
     for (int k = 0; k < perProcessSize; ++k) {
         pointsCoordinates[k] = (float *) malloc(d * sizeof(float));
@@ -131,12 +134,14 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < perProcessSize; ++i) {
             distances[i] = calculateDistance(vp, pointsCoordinates[i], d);
-            printf("Distance to %d (%f,%f):\t%f\n", processID * perProcessSize + i + 1,pointsCoordinates[i][0],pointsCoordinates[i][1],
-                    distances[i]);
+            tempDistances[i] = distances[i];
+            //printf("Distance to %d-%d (%f,%f):\t%f\n", processID, i, pointsCoordinates[i][0], pointsCoordinates[i][1],
+            //       distances[i]);
         }
 
+
         MPI_Barrier(*communicator);
-        float median = mpiFindMedian(processID, noProcesses, perGroupSize, distances, communicator); // TODO use pid 1st
+        float median = mpiFindMedian(processID, noProcesses, perGroupSize, tempDistances, communicator); // TODO use pid 1st
         float **lessEqual, **greater;
         lessEqual = (float **) malloc(perProcessSize * sizeof(float *));
         greater = (float **) malloc(perProcessSize * sizeof(float *));
@@ -147,23 +152,20 @@ int main(int argc, char **argv) {
         int countLessEqual = 0, countGreater = 0;
         int *countersLE, *countersG, *statuses;
 
+        MPI_Barrier(*communicator);
+
         // Splits points and calculates the counters.
-        for (int j = 0; j < perProcessSize; ++j) {
+        for (int j = 0; j < perProcessSize; j++) {
+            //printf("Process %d-%d: %f\t%f\tdist=%f\n", pid, j, pointsCoordinates[j][0], pointsCoordinates[j][1], distances[j]);
             if (distances[j] <= median) {
-                //copyPoint(lessEqual[countLessEqual], pointsCoordinates[j], d);
-                for (int i = 0; i < d; ++i) {
-                    lessEqual[countLessEqual][i]=pointsCoordinates[j][i];
-                }
-                printf("Process %d-%d: lessEqual[%d] = %f\t%f\tdist=%f\n", pid,j, countLessEqual, pointsCoordinates[j][0],
-                       pointsCoordinates[j][1],distances[j]);
+                copyPoint(lessEqual[countLessEqual], pointsCoordinates[j], d);
+                //printf("Process %d-%d: lessEqual[%d] = %f\t%f\tdist=%f\n", pid, j, countLessEqual, pointsCoordinates[j][0],
+                //       pointsCoordinates[j][1], distances[j]);
                 countLessEqual++;
             } else {
-                //copyPoint(greater[countGreater], pointsCoordinates[j], d);
-                for (int i = 0; i < d; ++i) {
-                    greater[countGreater][i]=pointsCoordinates[j][i];
-                }
-                printf("Process %d-%d: greater[%d] = %f\t%f\tdist=%f\n", pid,j, countGreater, pointsCoordinates[countGreater][0],
-                        greater[countGreater][1],distances[j]);
+                copyPoint(greater[countGreater], pointsCoordinates[j], d);
+                //printf("Process %d-%d: greater[%d] = %f\t%f\tdist=%f\n", pid, j, countGreater, pointsCoordinates[j][0],
+                //       pointsCoordinates[j][1], distances[j]);
                 countGreater++;
             }
         }
@@ -186,7 +188,7 @@ int main(int argc, char **argv) {
         }
         MPI_Barrier(*communicator);
         //printf("(BEFORE) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, countLessEqual, countGreater);
-        MPI_Barrier(*communicator); // TODO Remove this. It's only for show.
+        //MPI_Barrier(*communicator); // TODO Remove this. It's only for show.
 
         int status = 0, *directions;
         directions = (int *) malloc(3 * sizeof(int));
@@ -354,17 +356,17 @@ int main(int argc, char **argv) {
         int tempCountLessEqual = 0, tempCountGreater = 0;
         for (int j = 0; j < perProcessSize; ++j) {
             if ((calculateDistance(vp, lessEqual[j], d) <= median) && pid < noProcesses / 2) {
-                //printf("(AFTER) Process %d: lessEqual[%d] = %f\t%f\n", pid, tempCountLessEqual, lessEqual[tempCountLessEqual][0],
-                //       lessEqual[tempCountLessEqual][1]);
+                printf("(AFTER) Process %d: lessEqual[%d] = %f\t%f\n", pid, tempCountLessEqual, lessEqual[tempCountLessEqual][0],
+                       lessEqual[tempCountLessEqual][1]);
                 tempCountLessEqual++;
             }
             if ((calculateDistance(vp, greater[j], d) >= median) && pid >= noProcesses / 2) {
-                //printf("(AFTER) Process %d: greater[%d] = %f\t%f\n", pid, tempCountGreater, greater[tempCountGreater][0],
-                //       lessEqual[tempCountGreater][1]);
+                printf("(AFTER) Process %d: greater[%d] = %f\t%f\n", pid, tempCountGreater, greater[tempCountGreater][0],
+                       lessEqual[tempCountGreater][1]);
                 tempCountGreater++;
             }
-        }
-        //printf("(AFTER) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, tempCountLessEqual, tempCountGreater);
+        }/**/
+        printf("(AFTER) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, tempCountLessEqual, tempCountGreater);
 
 
     }
