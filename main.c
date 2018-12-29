@@ -113,8 +113,9 @@ int main(int argc, char **argv) {
 
     MPI_Comm communicator[1];
 
-    int loopΕnd = (int) log2(noProcesses);
-    for (loop = 0; loop <= loopΕnd; ++loop) {
+    int loopEnd = (int) log2(noTotalProcesses);
+    printf("loopEnd = %d\n",loopEnd);
+    for (loop = 0; loop < loopEnd; ++loop) {
         groups = (int) pow(2, loop); //number of groups
         //printf("Groups = %d\n", groups);
         noProcesses = noTotalProcesses / groups; // No of processes per group
