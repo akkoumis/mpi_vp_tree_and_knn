@@ -9,11 +9,12 @@
 #include <stddef.h>
 #include "mpiFindMedian.h"
 
-struct point {
-    float x, y;
+struct node {
+    float *vp;
+    float radius;
 };
 
-typedef struct point point;
+typedef struct node node;
 
 
 int findMin(int a, int b) {
@@ -54,7 +55,6 @@ int main(int argc, char **argv) {
     int totalSize, perProcessSize, loop, master, groups, perGroupSize; // Size = # of elems
 
     float *distances, **pointsCoordinates, **lessEqual, **greater;;
-    point *points;
     totalSize = 16;
 
     MPI_Init(&argc, &argv);    /* starts MPI */
@@ -62,19 +62,22 @@ int main(int argc, char **argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &noTotalProcesses);    /* get total number of processes */
     perProcessSize = totalSize / noTotalProcesses;
 
-    /* create a type for struct point */
+    /* create a type for struct node */
     const int nitems = 2;
     int blocklengths[2] = {1, 1};
-    MPI_Datatype types[2] = {MPI_FLOAT, MPI_FLOAT};
-    MPI_Datatype mpi_point_type;
+    MPI_Datatype types[2] = {MPI_LONG_INT, MPI_FLOAT};
+    MPI_Datatype mpi_node_type;
     MPI_Aint offsets[2];
 
-    offsets[0] = offsetof(struct point, x);
-    offsets[1] = offsetof(struct point, y);
+    offsets[0] = offsetof(struct node, vp);
+    offsets[1] = offsetof(struct node, radius);
 
-    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_point_type);
-    MPI_Type_commit(&mpi_point_type);
+    MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_node_type);
+    MPI_Type_commit(&mpi_node_type);
 
+    //printf("%d\t%d\n", sizeof(node), sizeof(long int));
+
+    node *tree = (node *) malloc((2 * totalSize - 1) * sizeof(node));
 
     // Each process read simultaneously its data, from the file
     FILE *fp;
@@ -110,8 +113,8 @@ int main(int argc, char **argv) {
 
     MPI_Comm communicator[1];
 
-    //int loopend = log2(noProcesses);
-    for (loop = 0; loop <= 0; ++loop) {
+    int loopΕnd = (int) log2(noProcesses);
+    for (loop = 0; loop <= loopΕnd; ++loop) {
         groups = (int) pow(2, loop); //number of groups
         //printf("Groups = %d\n", groups);
         noProcesses = noTotalProcesses / groups; // No of processes per group
@@ -151,7 +154,7 @@ int main(int argc, char **argv) {
         int countLessEqual = 0, countGreater = 0;
         int *countersLE, *countersG, *statuses;
 
-        MPI_Barrier(*communicator);
+        //MPI_Barrier(*communicator);
 
         // Splits points and calculates the counters.
         for (int j = 0; j < perProcessSize; j++) {
@@ -383,6 +386,7 @@ int main(int argc, char **argv) {
             }
             if (*counterToBeZero > 0) {// It means we have some extra medians that shall remain here (2nd subgroup)
                 //TODO
+                printf("ERROR: Multiple medians\n");
                 for (int i = 0; i < *counterToBeZero; ++i) {
                     for (int j = 0; j < d; ++j) {
                         greater[*counterToBeMax + i][j] = lessEqual[i][j]; // Move points from lessEqual to greater
@@ -392,29 +396,85 @@ int main(int argc, char **argv) {
                 *counterToBeZero = 0;
             }
         }
+        float **dataToFetch = (pid < noProcesses / 2) ? lessEqual : greater;
+        for (int l = 0; l < perProcessSize; ++l) {
+            for (int i = 0; i < d; ++i) {
+                pointsCoordinates[l][i] = dataToFetch[l][i]; // Save the data for the next iteration of the loop
+            }
+        }
         // Calculates the counters for verification.
         int tempCountLessEqual = 0, tempCountGreater = 0;
         for (int j = 0; j < perProcessSize; ++j) {
             if ((calculateDistance(vp, lessEqual[j], d) <= median) && pid < noProcesses / 2 && j < countLessEqual) {
-                printf("(AFTER) Process %d: lessEqual[%d] = %f\t%f\n", pid, tempCountLessEqual, lessEqual[tempCountLessEqual][0],
-                       lessEqual[tempCountLessEqual][1]);
+                //printf("(AFTER) Process %d: lessEqual[%d] = %f\t%f\n", pid, tempCountLessEqual, pointsCoordinates[tempCountLessEqual][0],
+                //       pointsCoordinates[tempCountLessEqual][1]);
                 tempCountLessEqual++;
             }
             if ((calculateDistance(vp, greater[j], d) >= median) && pid >= noProcesses / 2 && j < countGreater) {
-                printf("(AFTER) Process %d: greater[%d] = %f\t%f\n", pid, tempCountGreater, greater[tempCountGreater][0],
-                       greater[tempCountGreater][1]);
+                //printf("(AFTER) Process %d: greater[%d] = %f\t%f\n", pid, tempCountGreater, pointsCoordinates[tempCountGreater][0],
+                //       pointsCoordinates[tempCountGreater][1]);
                 tempCountGreater++;
             }
         }/**/
         //printf("(AFTER) ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", processID, tempCountLessEqual, tempCountGreater);
+
+        // Masters create the node and send it to allmaster
+        int treeOffset;
         if (pid == 0) {
+            // Masters construct the tree
+            treeOffset = groups - 1; // This is the index of the start of the nodes on the same height
+            treeOffset += processID / noProcesses; // Find the exact position of the node on the tree
+            //for (int m = 0; m < groups; ++m) {
+            tree[treeOffset].radius = median; // Store the radius value of the node
+            tree[treeOffset].vp = (float *) malloc(d * sizeof(float));
+            for (int i = 0; i < d; ++i) {
+                tree[treeOffset].vp[i] = vp[i]; // Store the Vantage Point
+            }
+
+            if (processID == 0) {
+                // Receive all the nodes of this height
+                treeOffset = groups - 1;
+                for (int i = 1; i < groups; ++i) {
+                    MPI_Recv(&(tree[treeOffset + i].radius), 1, MPI_FLOAT, i * noProcesses, 8, MPI_COMM_WORLD, &mpiStat);
+                    tree[treeOffset + i].vp = (float *) malloc(d * sizeof(float));
+                    MPI_Recv(tree[treeOffset + i].vp, d, MPI_FLOAT, i * noProcesses, 9, MPI_COMM_WORLD, &mpiStat);
+                }
+            } else {
+                // Send the node to the master (of the world)
+                MPI_Send(&median, 1, MPI_FLOAT, 0, 8, MPI_COMM_WORLD);
+                MPI_Send(vp, d, MPI_FLOAT, 0, 9, MPI_COMM_WORLD);
+                free(tree[treeOffset].vp);
+            }
+
+            // Free for malloc
             free(countersLE);
             free(countersG);
             free(statuses);
         }
 
+        //Allmaster sends the nodes to all the processes
+        treeOffset = groups - 1;
+        if (processID == 0) {
+            for (int i = 0; i < groups; ++i) { // Iterate all nodes to be sent
+                MPI_Bcast(&(tree[treeOffset + i].radius), 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+                MPI_Bcast(tree[treeOffset + i].vp, d, MPI_FLOAT, 0, MPI_COMM_WORLD);
+                printf("Process %d\tTree height %d,%d\t r=%f\tvp=%f,%f\n", processID, loop, i, tree[treeOffset + i].radius,
+                       tree[treeOffset + i].vp[0], tree[treeOffset + i].vp[1]);
+            }
+        } else {
+            for (int i = 0; i < groups; ++i) { // Iterate all nodes to be received
+                MPI_Bcast(&(tree[treeOffset + i].radius), 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+                tree[treeOffset + i].vp = (float *) malloc(d * sizeof(float));
+                MPI_Bcast(tree[treeOffset + i].vp, d, MPI_FLOAT, 0, MPI_COMM_WORLD);
+                printf("Process %d\tTree height %d,%d\t r=%f\tvp=%f,%f\n", processID, loop, i, tree[treeOffset + i].radius,
+                       tree[treeOffset + i].vp[0], tree[treeOffset + i].vp[1]);
+            }
+        }
 
+        MPI_Barrier(*communicator);
     }
+
+
 
     // Free for malloc
     free(distances);
@@ -430,7 +490,7 @@ int main(int argc, char **argv) {
     //MPI_Barrier(MPI_COMM_WORLD);
     //printf("Main Median = %f\n",median);
 
-    MPI_Type_free(&mpi_point_type);
+    MPI_Type_free(&mpi_node_type);
     MPI_Finalize();
 
 }
