@@ -341,7 +341,7 @@ float masterPart(int noProcesses, int processId, int size, int partLength, float
             }
             lapsed.tv_usec = second.tv_usec - first.tv_usec;
             lapsed.tv_sec = second.tv_sec - first.tv_sec;
-            printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
+            //printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
             validation(median, partLength, size, numberPart, processId);
             //MPI_Finalize();
             free(pivotArray);
@@ -550,7 +550,7 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
             lapsed.tv_sec = second.tv_sec - first.tv_sec;
             validationST(median, sizeOfArray, distances);
             //printf("Time elapsed: %lu, %lu s\n", lapsed.tv_sec, lapsed.tv_usec);
-            printf("Median: %f\n", median);
+            //printf("Median: %f\n", median);
             //free(distances);
             //MPI_Finalize();
             return median;
@@ -565,7 +565,7 @@ float mpiFindMedian(int processId, int noProcesses, int sizeOfArray, float *dist
     }
     if (pid == 0) {
         median = masterPart(noProcesses, pid, sizeOfArray, partLength, distances);
-        printf("Median: %f\n", median);
+        //printf("Median: %f\n", median);
         for (int i = 1; i < noProcesses; i++)
             MPI_Send(&median, 1, MPI_FLOAT, i, 2, *comm); // TAG 2 = MEDIAN
         return median;
