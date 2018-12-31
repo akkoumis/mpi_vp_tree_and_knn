@@ -120,7 +120,7 @@ void validation(float median, int partLength, int size, float *numberPart, int p
     if (processId == 0) {
         if ((sumMax <= size / 2) &&
             (sumMin <= size / 2))  //Checks if both the lower and higher values occupy less than 50% of the total array.
-            printf("VALIDATION PASSED!\n");
+            printf(""); //printf("VALIDATION PASSED!\n");
         else
             printf("VALIDATION FAILED!\n");
 
@@ -148,7 +148,7 @@ void validationST(float median, int size, float *numberPart) {
     }
     if ((countMax <= size / 2) &&
         (countMin <= size / 2))  //Checks if both the lower and higher values occupy less than 50% of the total array.
-        printf("VALIDATION PASSED!\n");
+        printf(""); //printf("VALIDATION PASSED!\n");
     else
         printf("VALIDATION FAILED!\n");
 
