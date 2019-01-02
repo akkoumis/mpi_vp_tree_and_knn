@@ -10,6 +10,7 @@
 #include "mpiFindMedian.h"
 
 int d = 2;
+int maxK = 4;
 
 struct node {
     float *vp;
@@ -122,15 +123,34 @@ void fillTreeWithOtherProcesses(int myProcessID, int otherProcessID, node *tree,
     }
 }
 
-void findLeafs(const node *tree, int startIndex, int *counter, float **leafs, const float *vp, int dimension) {
+void findLeafsAndCalculateDistance(const node *tree, int startIndex, int *counter, float **leafs, const float *qp, int dimension) {
     if (tree[startIndex].radius == -99) { // It means we found a leaf
         copyPoint(leafs[*counter], tree[startIndex].vp, dimension);
-        leafs[*counter][dimension] = calculateDistance(vp, leafs[*counter], dimension); // Add distance from vp to the end
-        printf("Leaf[%d] = (%f, %f) distFromVP = %f\n", *counter, leafs[*counter][0], leafs[*counter][1], leafs[*counter][dimension]);
+        leafs[*counter][dimension] = calculateDistance(qp, leafs[*counter], dimension); // Add distance from qp to the end
+        //printf("Leaf[%d] = (%f, %f) distFromVP = %f\n", *counter, leafs[*counter][0], leafs[*counter][1], leafs[*counter][dimension]);
         (*counter)++;
     } else {
-        findLeafs(tree, 2 * startIndex + 1, counter, leafs, vp, dimension);
-        findLeafs(tree, 2 * startIndex + 2, counter, leafs, vp, dimension);
+        findLeafsAndCalculateDistance(tree, 2 * startIndex + 1, counter, leafs, qp, dimension);
+        findLeafsAndCalculateDistance(tree, 2 * startIndex + 2, counter, leafs, qp, dimension);
+    }
+}
+
+void getCandidates(const node *tree, int startIndex, int firstStartIndex, int *counterCandidates, float **candidates, const float *qp, const
+float kNNDistance) {
+    if (tree[startIndex].radius == -99) { // Reached the leafs
+        float distanceQPToLeaf = calculateDistance(qp, tree[startIndex].vp, d);
+        if (distanceQPToLeaf < kNNDistance) {
+            copyPoint(candidates[*counterCandidates], tree[startIndex].vp, d);
+            candidates[*counterCandidates][d] = distanceQPToLeaf;
+            (*counterCandidates)++;
+            // TODO Maybe change knnDistance, by removing const and converting to pointer
+        }
+    } else {
+        // TODO Prune the tree accordingly
+        if ((2 * startIndex + 1) != firstStartIndex)
+            getCandidates(tree, 2 * startIndex + 1, firstStartIndex, counterCandidates, candidates, qp, kNNDistance);
+        if ((2 * startIndex + 2) != firstStartIndex)
+            getCandidates(tree, 2 * startIndex + 2, firstStartIndex, counterCandidates, candidates, qp, kNNDistance);
     }
 }
 
@@ -139,14 +159,25 @@ int compareBasedOnDistance(const void *a, const void *b) {
     float y = (*(const float **) b)[d];
     int temp;
     temp = x < y ? -1 : x == y ? 0 : 1;
-    /*if (x < y)
-        temp= -1;
-    else if (x > y)
-        temp= 1;
-    else
-        temp=0;*/
-    printf("Compare = %d\n", temp);
+    //printf("Compare = %d\n", temp);
     return temp;
+}
+
+void findClosestFrontierDistance(const node *tree, const int startIndex, const int qpIndex, float *closestFrontierDistance) {
+    float distanceToFrontier;
+    int parentIndex = (startIndex - 1) / 2;
+    if (parentIndex >= 0) {
+        if (startIndex % 2 == 1) {// It means the node tree[startIndex] is a left child => inside of the radius
+            distanceToFrontier = tree[parentIndex].radius - calculateDistance(tree[qpIndex].vp, tree[parentIndex].vp, d);
+        } else {
+            distanceToFrontier = calculateDistance(tree[qpIndex].vp, tree[parentIndex].vp, d) - tree[parentIndex].radius;
+        }
+        //printf("Pid %pid distanceFrontierOfIndex[%d] = %f\n",pid, startIndex, distanceToFrontier);
+        if (distanceToFrontier < *closestFrontierDistance)
+            *closestFrontierDistance = distanceToFrontier;
+        if (parentIndex > 0)
+            findClosestFrontierDistance(tree, parentIndex, qpIndex, closestFrontierDistance);
+    }
 }
 
 
@@ -193,7 +224,6 @@ int main(int argc, char **argv) {
         fscanf(fp, "%s", buff); // Moving stream according to offset
     }
 
-    //points = (point *) malloc(perProcessSize * sizeof(point));
     distances = (float *) malloc(perProcessSize * sizeof(float));
     float *tempDistances = (float *) malloc(perProcessSize * sizeof(float));
     pointsCoordinates = (float **) malloc(perProcessSize * sizeof(float *));
@@ -605,43 +635,154 @@ int main(int argc, char **argv) {
     //MPI_Barrier(MPI_COMM_WORLD);
 
     // k-ΝΝ
-    for (int process = 0; process < 1; ++process) { // TODO process < noTotalProcesses
-        if (processID == process) { // It means that this process execute the search
-            for (int i = 3; i <= 3; ++i) { // k = 2^[1:8]
-                int k = (int) pow(2, i); // Calculate the k
-                int startIndex, parentIndex;
+    float ***neighbors = (float ***) malloc(perProcessSize * sizeof(float **)); // To store the neighbors of each local point
+    for (int l = 0; l < perProcessSize; ++l) { // perProcessSize array needed for each point to store its kNN
+        neighbors[l] = (float **) malloc(maxK * sizeof(float *)); // k sized array needed for the neighbors
+        for (int j = 0; j < maxK; ++j) {
+            neighbors[l][j] = (float *) malloc((d + 1) * sizeof(float));
+        }
+    }
 
-                float ***neighbors = (float ***) malloc(perProcessSize * sizeof(float **)); // To store the neighbors of each local point
-                for (int l = 0; l < perProcessSize; ++l) { // perProcessSize array needed for each point to store its kNN
-                    neighbors[l] = (float **) malloc(k * sizeof(float *)); // k sized array needed for the neighbors
-                    for (int j = 0; j < k; ++j) {
-                        neighbors[l][j] = (float *) malloc((d + 1) * sizeof(float));
-                    }
-                }
+    float distanceToFrontier;
+    for (int i = 2; i <= 2; ++i) { // k = 2^[1:8]
+        int k = (int) pow(2, i); // Calculate the k
 
-                treeOffset = totalSize - 1; // Points to the start of the leafs.
+        for (int process = 0; process < noTotalProcesses; ++process) { // TODO process < noTotalProcesses
+            if (processID == process) { // It means that this process execute the search
+                int startIndex, parentIndex, qpIndex;
+
+                treeOffset = totalSize - 1 + processID * perProcessSize; // Points to the start of the leafs.
+                printf("\nProcess %d is searching at [%d]\n", processID, treeOffset);
                 for (int j = 0; j < 1; ++j) { // TODO j<perProcessSize
+                    qpIndex = treeOffset + j;
+
                     startIndex = treeOffset + j;
                     for (int l = 0; l < i; ++l) {
-                        startIndex = (startIndex - 1) / 2;
+                        startIndex = (startIndex - 1) / 2; // Find the start of the subtree that has as many
                     }
                     //printf("startIndex = %d\n",startIndex);
                     parentIndex = (startIndex - 1) / 2;
 
                     int counterLeaf[] = {0};
-                    findLeafs(tree, startIndex, counterLeaf, neighbors[j], tree[parentIndex].vp, d);
+                    findLeafsAndCalculateDistance(tree, startIndex, counterLeaf, neighbors[j], tree[qpIndex].vp, d);
                     qsort(neighbors[j], k, sizeof(*neighbors), compareBasedOnDistance);
+                    /*for (int m = 0; m < k; ++m) {
+                        printf("QNN[%d] = (%f, %f) distFromVP = %f\n", m, neighbors[j][m][0], neighbors[j][m][1], neighbors[j][m][d]);
+                    }*/
 
+                    if (startIndex % 2 == 1) {// It means the node tree[startIndex] is a left child => inside of the radius
+                        distanceToFrontier = tree[parentIndex].radius - calculateDistance(tree[qpIndex].vp, tree[parentIndex].vp, d);
+                    } else {
+                        distanceToFrontier = calculateDistance(tree[qpIndex].vp, tree[parentIndex].vp, d) - tree[parentIndex].radius;
+                    }
 
+                    //float closestFrontierDistance[] = {distanceToFrontier};
+                    findClosestFrontierDistance(tree, startIndex, qpIndex, &distanceToFrontier);
 
+                    printf("PID = %d\tkNNDist = %f\tfrontierDist = %f\n", processID, neighbors[j][k - 1][d], distanceToFrontier);
+                    if (neighbors[j][k - 1][d] > distanceToFrontier) { // If furthest kNN is further than the frontier
+                        printf("kΝΝ pid=%d is further than the frontier\n", processID);
+
+                        // At first we check the local subtree (of this process)
+                        int otherProcessesNeeded = 0;
+                        float distanceToLocalFrontier;
+                        int localTreeStartIndex = noTotalProcesses - 1 + processID;
+                        int parentLocal = (localTreeStartIndex - 1) / 2;
+
+                        if (localTreeStartIndex % 2 == 1) {// It means the node of the local subtree is a left child => inside of the radius
+                            distanceToLocalFrontier =
+                                    tree[parentLocal].radius - calculateDistance(tree[qpIndex].vp, tree[parentLocal].vp, d);
+                        } else {
+                            distanceToLocalFrontier =
+                                    calculateDistance(tree[qpIndex].vp, tree[parentLocal].vp, d) - tree[parentLocal].radius;
+                        }
+
+                        findClosestFrontierDistance(tree, localTreeStartIndex, qpIndex, &distanceToLocalFrontier);
+
+                        if (neighbors[j][k - 1][d] > distanceToLocalFrontier) {
+                            otherProcessesNeeded = 1;
+                        }
+
+                        float **candidatePoints = (float **) malloc(perProcessSize * sizeof(float *));
+                        for (int l = 0; l < perProcessSize; ++l) {
+                            candidatePoints[l] = (float *) malloc((d + 1) * sizeof(float));
+                        }
+                        int counterCandidates[] = {0};
+
+                        if (localTreeStartIndex != startIndex)
+                            getCandidates(tree, localTreeStartIndex, startIndex, counterCandidates, candidatePoints, tree[qpIndex].vp,
+                                          neighbors[j][k - 1][d]);
+                        for (int m = 0; m < *counterCandidates; ++m) {
+                            printf("Candidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
+                                   candidatePoints[m][1], candidatePoints[m][d]);
+                        }
+                        /*qsort(candidatePoints, *counterCandidates, sizeof(candidatePoints), compareBasedOnDistance);
+                        for (int m = 0; m < *counterCandidates; ++m) {
+                            printf("QCandidates[%d] = (%f, %f) distFromVP = %f\n", m, candidatePoints[m][0], candidatePoints[m][1],
+                                   candidatePoints[m][d]);
+                        }*/
+
+                        // TODO fill this with communications between processes
+                        if (otherProcessesNeeded) {
+                            printf("Other processes are needed at pid = %d\n", processID);
+
+                        }
+                        for (int l = 0; l < perProcessSize; ++l) {
+                            free(candidatePoints[l]);
+                        }
+                        free(candidatePoints);
+                    }
                 }
+            } else { // It means this process helps the process that searches
 
             }
+        }
 
-        } else { // It means this process helps the process that searches
+    }
+    MPI_Barrier(MPI_COMM_WORLD); // For timing
 
+
+
+    // VALIDATION
+    for (int m = 0; m < noTotalProcesses; ++m) {
+        //shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for validation TODO uncomment this line
+    }
+    float ***validNeighbors = (float ***) malloc(perProcessSize * sizeof(float **)); // To store the neighbors of each local point
+    for (int l = 0; l < perProcessSize; ++l) { // perProcessSize array needed for each point to store its kNN
+        validNeighbors[l] = (float **) malloc(totalSize * sizeof(float *)); // k sized array needed for the neighbors
+        for (int j = 0; j < totalSize; ++j) {
+            validNeighbors[l][j] = (float *) malloc((d + 1) * sizeof(float));
         }
     }
+
+    for (int j = 0; j < 1; ++j) { // TODO j<perProcessSize for every point of the process
+        int o = processID * perProcessSize + j;
+        int counterLeaf[] = {0};
+        findLeafsAndCalculateDistance(tree, 0, counterLeaf, validNeighbors[j], tree[totalSize - 1 + o].vp, d);
+        qsort(validNeighbors[j], totalSize, sizeof(*validNeighbors), compareBasedOnDistance);
+        int valid = 1;
+        for (int i = 0; i < maxK; ++i) {
+            printf("PID %d (%f,%f) %f\t(%f,%f) %f\n", processID, neighbors[j][i][0], neighbors[j][i][1], neighbors[j][i][d],
+                   validNeighbors[j][i][0], validNeighbors[j][i][1], validNeighbors[j][i][d]);
+            for (int k = 0; k < d + 1; ++k) {
+                if (validNeighbors[j][i][k] != neighbors[j][i][k])
+                    valid = 0;
+            }
+        }
+        if (valid)
+            printf("NN PID %d PASSED\n", processID);
+        else
+            printf("NN PID %d VALIDATION FAILED\n", processID);
+    }
+
+    // Free neighbor array
+    for (int l = 0; l < perProcessSize; ++l) { // perProcessSize array needed for each point to store its kNN
+        for (int j = 0; j < maxK; ++j) {
+            free(neighbors[l][j]);
+        }
+        free(neighbors[l]);
+    }
+    free(neighbors);
 
     // Free for malloc
     free(distances);
