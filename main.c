@@ -140,6 +140,19 @@ float kNNDistance) {
     if (tree[startIndex].radius == -99) { // Reached the leafs
         float distanceQPToLeaf = calculateDistance(qp, tree[startIndex].vp, d);
         if (distanceQPToLeaf < kNNDistance) {
+            printf("Found candidate[%d]\n", *counterCandidates);
+            /*int i = 0;
+            while (distanceQPToLeaf > candidates[i][d]) {
+                i++;
+            }
+            for (int j = *counterCandidates; j > i; j--) {
+                copyPoint(candidates[j], candidates[j - 1], d + 1);
+            }
+            printf("Inserting candidate[%d] at index %d\n", *counterCandidates, i);
+            copyPoint(candidates[i], tree[startIndex].vp, d);
+            candidates[i][d] = distanceQPToLeaf;*/
+
+            printf("Inserting candidate[%d] at index %d\n", *counterCandidates, *counterCandidates);
             copyPoint(candidates[*counterCandidates], tree[startIndex].vp, d);
             candidates[*counterCandidates][d] = distanceQPToLeaf;
             (*counterCandidates)++;
@@ -155,6 +168,15 @@ float kNNDistance) {
 }
 
 int compareBasedOnDistance(const void *a, const void *b) {
+    float x = (*(const float **) a)[d];
+    float y = (*(const float **) b)[d];
+    int temp;
+    temp = x < y ? -1 : x == y ? 0 : 1;
+    //printf("Compare = %d\n", temp);
+    return temp;
+}
+
+int compareBasedOnCandidatesDistance(const void *a, const void *b) {
     float x = (*(const float **) a)[d];
     float y = (*(const float **) b)[d];
     int temp;
@@ -644,17 +666,30 @@ int main(int argc, char **argv) {
     }
 
     float distanceToFrontier;
-    for (int i = 2; i <= 2; ++i) { // k = 2^[1:8]
+    for (int i = 1; i <= 1; ++i) { // k = 2^[1:8]
         int k = (int) pow(2, i); // Calculate the k
 
-        for (int process = 0; process < noTotalProcesses; ++process) { // TODO process < noTotalProcesses
-            if (processID == process) { // It means that this process execute the search
+        maxK = k;
+
+        for (int searchProcess = 0; searchProcess < noTotalProcesses; ++searchProcess) { // TODO process < noTotalProcesses
+            if (processID == searchProcess) { // It means that this process execute the search
                 int startIndex, parentIndex, qpIndex;
 
                 treeOffset = totalSize - 1 + processID * perProcessSize; // Points to the start of the leafs.
                 printf("\nProcess %d is searching at [%d]\n", processID, treeOffset);
+
+                //float ***pointsToBeSent = (float ***) malloc(noTotalProcesses * sizeof(float **));
+                int pointsToBeSentIndices[perProcessSize][noTotalProcesses];
+                int *countersPointsToBeSent = (int *) malloc(noTotalProcesses * sizeof(int));
+                for (int n = 0; n < noTotalProcesses; ++n) {
+                    countersPointsToBeSent[n] = 0; // How many points to send to each process
+                }
+
                 for (int j = 0; j < 1; ++j) { // TODO j<perProcessSize
                     qpIndex = treeOffset + j;
+                    for (int n = 0; n < noTotalProcesses; ++n) {
+                        pointsToBeSentIndices[j][n] = 0; // Is the point j to be sent to process n?
+                    }
 
                     startIndex = treeOffset + j;
                     for (int l = 0; l < i; ++l) {
@@ -676,7 +711,6 @@ int main(int argc, char **argv) {
                         distanceToFrontier = calculateDistance(tree[qpIndex].vp, tree[parentIndex].vp, d) - tree[parentIndex].radius;
                     }
 
-                    //float closestFrontierDistance[] = {distanceToFrontier};
                     findClosestFrontierDistance(tree, startIndex, qpIndex, &distanceToFrontier);
 
                     printf("PID = %d\tkNNDist = %f\tfrontierDist = %f\n", processID, neighbors[j][k - 1][d], distanceToFrontier);
@@ -708,18 +742,20 @@ int main(int argc, char **argv) {
                             candidatePoints[l] = (float *) malloc((d + 1) * sizeof(float));
                         }
                         int counterCandidates[] = {0};
-
-                        if (localTreeStartIndex != startIndex)
+                        //printf("At PID = %d\tlocalTreeStartIndex = %d\tstartIndex = %d\n", processID, localTreeStartIndex, startIndex);
+                        if (localTreeStartIndex != startIndex) {
+                            printf("At PID = %d searching for candidates starting at node %d\n", processID, localTreeStartIndex);
                             getCandidates(tree, localTreeStartIndex, startIndex, counterCandidates, candidatePoints, tree[qpIndex].vp,
                                           neighbors[j][k - 1][d]);
+                        }
                         for (int m = 0; m < *counterCandidates; ++m) {
                             printf("Candidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
                                    candidatePoints[m][1], candidatePoints[m][d]);
                         }
-                        /*qsort(candidatePoints, *counterCandidates, sizeof(candidatePoints), compareBasedOnDistance);
+                        /*qsort(candidatePoints, *counterCandidates, sizeof(*neighbors), compareBasedOnCandidatesDistance);
                         for (int m = 0; m < *counterCandidates; ++m) {
-                            printf("QCandidates[%d] = (%f, %f) distFromVP = %f\n", m, candidatePoints[m][0], candidatePoints[m][1],
-                                   candidatePoints[m][d]);
+                            printf("QCandidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
+                                   candidatePoints[m][1], candidatePoints[m][d]);
                         }*/
 
                         // TODO fill this with communications between processes
@@ -727,14 +763,30 @@ int main(int argc, char **argv) {
                             printf("Other processes are needed at pid = %d\n", processID);
 
                         }
+
+                        // TODO integrate candidate points
+
+
+                        //free(pointsToBeSent);
+                        free(countersPointsToBeSent);
                         for (int l = 0; l < perProcessSize; ++l) {
                             free(candidatePoints[l]);
                         }
                         free(candidatePoints);
+
+                        int finishCode = -1;
+                        for (int n = 0; n < noTotalProcesses; ++n) {
+                            //if (processID != n)
+                            //    MPI_Send(&finishCode, 1, MPI_INT, n, 10, MPI_COMM_WORLD);
+                        }
                     }
                 }
-            } else { // It means this process helps the process that searches
-
+            } else { // It means this process helps the one that searches
+                int temp = -1; // To be renamed to counter
+                //MPI_Recv(&temp, 1, MPI_INT, searchProcess, 10, MPI_COMM_WORLD, &mpiStat);
+                while (temp != -1) {
+                    // TODO search for candidates
+                }
             }
         }
 
