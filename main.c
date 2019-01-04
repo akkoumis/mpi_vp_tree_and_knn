@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <stddef.h>
+#include <sys/time.h>
 #include "mpiFindMedian.h"
 
 int d = 2;
@@ -43,9 +44,12 @@ void copyPoint(float *new, const float *old, int dimension) {
 }
 
 int checkStatuses(const int *statuses, int size) {
+    //printf("ERROR 1\n");
     for (int i = 0; i < size; ++i) {
-        if (statuses[i] < 1)
+        if (statuses[i] < 1) {
+            //printf("ERROR 2\n");
             return 0;
+        }
     }
     return 1;
 }
@@ -203,7 +207,7 @@ void getCandidatesOthers(const node *tree, int startIndex, int *counterCandidate
             // TODO Maybe change knnDistance, by removing const and converting to pointer
         }
     } else {
-        // TODO Prune the tree accordingly
+        // Prune the tree accordingly
         if (tree[startIndex].radius >= (calculateDistance(tree[startIndex].vp, qp, d) - kNNDistance))
             getCandidatesOthers(tree, 2 * startIndex + 1, counterCandidates, candidates, qp, kNNDistance);
         if (tree[startIndex].radius <= (calculateDistance(tree[startIndex].vp, qp, d) + kNNDistance))
@@ -256,7 +260,7 @@ int main(int argc, char **argv) {
     int totalSize, perProcessSize, loop, master, groups, perGroupSize; // Size = # of elems
 
     float *distances, **pointsCoordinates, **lessEqual, **greater;;
-    totalSize = 128;
+    totalSize = 64;
 
     MPI_Init(&argc, &argv);    /* starts MPI */
     MPI_Comm_rank(MPI_COMM_WORLD, &processID);    /* get current process id */
@@ -280,7 +284,7 @@ int main(int argc, char **argv) {
 
     node *tree = (node *) malloc((2 * totalSize - 1) * sizeof(node));
     node *tree2 = (node *) malloc((2 * totalSize - 1) * sizeof(node));
-//printf("tree size = %d\n", (2 * totalSize - 1));
+    //printf("tree size = %d\n", (2 * totalSize - 1));
 
     // Each process read simultaneously its data, from the file
     FILE *fp;
@@ -291,6 +295,7 @@ int main(int argc, char **argv) {
     for (long int i = 0; i < offset; ++i) {
         fscanf(fp, "%s", buff); // Moving stream according to offset
     }
+
 
     distances = (float *) malloc(perProcessSize * sizeof(float));
     float *tempDistances = (float *) malloc(perProcessSize * sizeof(float));
@@ -313,7 +318,15 @@ int main(int argc, char **argv) {
     }
     fclose(fp);
 
+
     MPI_Comm communicator[1];
+
+    struct timeval startwtime, endwtime;
+    double time_vp;
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (processID == 0)
+        gettimeofday(&startwtime, NULL);
 
     int loopEnd = (int) log2(noTotalProcesses);
     //printf("loopEnd = %d\n",loopEnd);
@@ -406,9 +419,13 @@ int main(int argc, char **argv) {
             for (int i = 0; i < noProcesses; ++i) {
                 //printf("(BEFORE) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i], countersG[i]);
             }
+
+
             int index1LE = 0, index1G = 0, index2LE = noProcesses / 2, index2G = noProcesses / 2;
+
             while (checkStatuses(statuses, noProcesses) == 0) { // While there are processes to be done.
                 // Index1
+                //printf("ERROR 1\n");
                 if (countersLE[index1LE] == perProcessSize) {
                     if (countersG[index1LE] == 0) {
                         statuses[index1LE] = 1;
@@ -479,7 +496,8 @@ int main(int argc, char **argv) {
                     countersLE[index2LE] -= directions[2];
                     countersLE[index1LE] += directions[2];
                 }
-
+                //printf("ERROR 1\n");
+                printf("%d\n", index1G);
                 if (index1G < noProcesses / 2) { // It means that we are not done
                     // Secondly SEND from index1G and RECEIVE to index2G
                     int GToFull = perProcessSize - countersG[index2G];
@@ -516,11 +534,17 @@ int main(int argc, char **argv) {
                     countersG[index1G] -= directions[2];
                     countersG[index2G] += directions[2];
                 }
-            }
-            for (int i = 0; i < noProcesses; ++i) {
-                //printf("(AFTER) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i],countersG[i]);
+                //printf("ERROR 2\n");
 
             }
+            //printf("ERROR 1\n");
+
+
+
+            for (int i = 0; i < noProcesses; ++i) {
+                //printf("(AFTER) Master -> ProcessID: %d\tLessEqual = %d\tGreater = %d.\n", i, countersLE[i],countersG[i]);
+            }
+
             /*directions[0] = 3;
             directions[1] = 1;
             directions[2] = 1;
@@ -971,6 +995,11 @@ int main(int argc, char **argv) {
 
     //}
     MPI_Barrier(MPI_COMM_WORLD); // For timing
+    if (processID == 0) {
+        gettimeofday(&endwtime, NULL);
+        time_vp = (double) ((endwtime.tv_usec - startwtime.tv_usec) / 1.0e6 + endwtime.tv_sec - startwtime.tv_sec);
+        printf("WALL TIME = %f\n", time_vp);
+    }
 
 
 
