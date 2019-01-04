@@ -141,7 +141,7 @@ float kNNDistance) {
         float distanceQPToLeaf = calculateDistance(qp, tree[startIndex].vp, d);
         if (distanceQPToLeaf < kNNDistance) {
             //printf("Found candidate[%d]\n", *counterCandidates);
-            /*if (*counterCandidates > 0) {
+            if (*counterCandidates > 0) {
                 int i = 0;
                 while (distanceQPToLeaf > candidates[i][d]) {
                     i++;
@@ -152,8 +152,7 @@ float kNNDistance) {
                 //printf("Inserting candidate[%d] at index %d\n", *counterCandidates, i);
                 copyPoint(candidates[i], tree[startIndex].vp, d);
                 candidates[i][d] = distanceQPToLeaf;
-            } else */
-            {
+            } else {/**/
                 //printf("Inserting candidate[%d] at index %d\n", *counterCandidates, *counterCandidates);
                 copyPoint(candidates[*counterCandidates], tree[startIndex].vp, d);
                 candidates[*counterCandidates][d] = distanceQPToLeaf;
@@ -163,12 +162,47 @@ float kNNDistance) {
         }
     } else {
         // TODO Prune the tree accordingly
-        if ((2 * startIndex + 1) != firstStartIndex)
+        if ((2 * startIndex + 1) != firstStartIndex && tree[startIndex].radius >= (calculateDistance(tree[startIndex].vp, qp, d) - kNNDistance))
             getCandidates(tree, 2 * startIndex + 1, firstStartIndex, counterCandidates, candidates, qp, kNNDistance);
-        if ((2 * startIndex + 2) != firstStartIndex)
+        if ((2 * startIndex + 2) != firstStartIndex && tree[startIndex].radius <= (calculateDistance(tree[startIndex].vp, qp, d) + kNNDistance))
             getCandidates(tree, 2 * startIndex + 2, firstStartIndex, counterCandidates, candidates, qp, kNNDistance);
     }
 }
+
+void getCandidatesOthers(const node *tree, int startIndex, int *counterCandidates, float **candidates, const float *qp, const float kNNDistance) {
+    //printf("Searching node %d\n", startIndex);
+    if (tree[startIndex].radius == -99) { // Reached the leafs
+        float distanceQPToLeaf = calculateDistance(qp, tree[startIndex].vp, d);
+        if (distanceQPToLeaf < kNNDistance) {
+            printf("Found candidate[%d]\n", *counterCandidates);
+            if (*counterCandidates > 0) {
+                int i = 0;
+                while (distanceQPToLeaf > candidates[i][d]) {
+                    i++;
+                }
+                for (int j = *counterCandidates; j > i; j--) {
+                    copyPoint(candidates[j], candidates[j - 1], d + 1);
+                }
+                //printf("Inserting candidate[%d] at index %d\n", *counterCandidates, i);
+                copyPoint(candidates[i], tree[startIndex].vp, d);
+                candidates[i][d] = distanceQPToLeaf;
+            } else {/**/
+                //printf("Inserting candidate[%d] at index %d\n", *counterCandidates, *counterCandidates);
+                copyPoint(candidates[*counterCandidates], tree[startIndex].vp, d);
+                candidates[*counterCandidates][d] = distanceQPToLeaf;
+            }
+            (*counterCandidates)++;
+            // TODO Maybe change knnDistance, by removing const and converting to pointer
+        }
+    } else {
+        // TODO Prune the tree accordingly
+        if (tree[startIndex].radius >= (calculateDistance(tree[startIndex].vp, qp, d) - kNNDistance))
+            getCandidatesOthers(tree, 2 * startIndex + 1, counterCandidates, candidates, qp, kNNDistance);
+        if (tree[startIndex].radius <= (calculateDistance(tree[startIndex].vp, qp, d) + kNNDistance))
+            getCandidatesOthers(tree, 2 * startIndex + 2, counterCandidates, candidates, qp, kNNDistance);
+    }
+}
+
 
 int compareBasedOnDistance(const void *a, const void *b) {
     float x = (*(const float **) a)[d];
@@ -214,7 +248,7 @@ int main(int argc, char **argv) {
     int totalSize, perProcessSize, loop, master, groups, perGroupSize; // Size = # of elems
 
     float *distances, **pointsCoordinates, **lessEqual, **greater;;
-    totalSize = 16;
+    totalSize = 64;
 
     MPI_Init(&argc, &argv);    /* starts MPI */
     MPI_Comm_rank(MPI_COMM_WORLD, &processID);    /* get current process id */
@@ -645,7 +679,7 @@ int main(int argc, char **argv) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     for (int m = 0; m < noTotalProcesses; ++m) {
-        shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for debugging TODO Remove this in assigment
+        shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for debugging
         //fillTreeWithOtherProcesses(processID, m, tree, treeOffset + m, 2 * totalSize - 1); // Fill the blanks with holder's processID
     }
 
@@ -676,7 +710,7 @@ int main(int argc, char **argv) {
     maxK = k;
 
     MPI_Barrier(MPI_COMM_WORLD);
-    for (int searchProcess = 0; searchProcess < noTotalProcesses; ++searchProcess) { // TODO process < noTotalProcesses
+    for (int searchProcess = 1; searchProcess < 2; ++searchProcess) { // TODO process < noTotalProcesses
         MPI_Barrier(MPI_COMM_WORLD);
         if (searchProcess == processID) { // It means that this process execute the search
             int startIndex, parentIndex, qpIndex;
@@ -742,11 +776,11 @@ int main(int argc, char **argv) {
                                       neighbors[j][k - 1][d]);
                     }
                     for (int m = 0; m < *counterCandidates; ++m) {
-                        printf("Candidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
-                               candidatePoints[m][1], candidatePoints[m][d]);
+                        //printf("Candidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
+                        //       candidatePoints[m][1], candidatePoints[m][d]);
                     }
 
-                    for (int n = 0; n < *counterCandidates - 1; ++n) {
+                    /*for (int n = 0; n < *counterCandidates - 1; ++n) {
                         for (int l = n + 1; l < *counterCandidates; ++l) {
                             if (candidatePoints[n][d] > candidatePoints[l][d]) {
                                 float temp[d + 1];
@@ -756,7 +790,7 @@ int main(int argc, char **argv) {
                             }
                         }
                     }
-                    /*qsort(candidatePoints, *counterCandidates, sizeof(*neighbors), compareBasedOnCandidatesDistance);
+                    qsort(candidatePoints, *counterCandidates, sizeof(*neighbors), compareBasedOnCandidatesDistance);
                     for (int m = 0; m < *counterCandidates; ++m) {
                         printf("QCandidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
                                candidatePoints[m][1], candidatePoints[m][d]);
@@ -796,6 +830,61 @@ int main(int argc, char **argv) {
                     if (otherProcessesNeeded) {
                         printf("Other processes are needed at pid = %d\n", processID);
 
+                        for (int l = 0; l < noTotalProcesses; ++l) { //TODO nototalpro
+                            if (l != processID) {
+                                int count = 1;
+                                /*      MPI_Send(&count, 1, MPI_INT, l, 10, MPI_COMM_WORLD); // Send signal
+                                      MPI_Send(tree[qpIndex].vp, d, MPI_FLOAT, l, 11, MPI_COMM_WORLD); // Send qp
+                                      MPI_Send(&neighbors[j][k - 1][d], 1, MPI_FLOAT, l, 12, MPI_COMM_WORLD); // Send kNN distance
+                                      float temp[d + 1];
+                                      MPI_Recv(&count, 1, MPI_INT, l, 13, MPI_COMM_WORLD, &mpiStat); // Receive candidates counter
+                                      int recvdSize = count * (d + 1);
+                                      float *recvdCandidates = (float *) malloc(recvdSize * sizeof(float));
+                                      MPI_Recv(recvdCandidates, recvdSize, MPI_FLOAT, l, 14, MPI_COMM_WORLD, &mpiStat); // Receive candidates
+                                      for (int m = 0; m < count; ++m) {
+                                          copyPoint(candidatePoints[m], &recvdCandidates[m * (d + 1)], d + 1);
+                                      }*/
+                                int startOffset = noTotalProcesses - 1;
+                                //printf("Other searching PID %d at index = %d for kNNDistance = %f\n", processID, startOffset + processID,
+                                //        neighbors[j][k - 1][d]);
+
+                                int oCounterCandidates[] = {0};
+                                float **oCandidatePoints = (float **) malloc(perProcessSize * sizeof(float *));
+                                for (int p = 0; p < perProcessSize; ++p) {
+                                    oCandidatePoints[p] = (float *) malloc((d + 1) * sizeof(float));
+                                }
+                                getCandidatesOthers(tree, startOffset + l, oCounterCandidates, oCandidatePoints, tree[qpIndex].vp,
+                                                    neighbors[j][k - 1][d]);
+                                /*printf("Other searching PID %d at index = %d. Found %d cands\n", processID, startOffset + processID,
+                                       *oCounterCandidates);
+                                for (int m = 0; m < count; ++m) {
+                                    printf("PID %d from %d candidate[%d] = (%f, %f) distFromVP = %f\n", processID, l, m, oCandidatePoints[m][0],
+                                           oCandidatePoints[m][1], oCandidatePoints[m][d]);
+                                }
+
+
+                                int oIndexNeighbors, oIndexCandidates = 0;
+                                for (oIndexNeighbors = 0; oIndexNeighbors < k; ++oIndexNeighbors) {
+                                    if (neighbors[j][oIndexNeighbors][d] > candidatePoints[oIndexCandidates][d] && oIndexCandidates < count) {
+                                        for (int oL = k - 1; oL > oIndexNeighbors; oL--) {
+                                            copyPoint(neighbors[j][oL], neighbors[j][oL - 1], d + 1);
+                                        }
+                                        float otemp[d + 1];
+                                        copyPoint(otemp, neighbors[j][oIndexNeighbors], d + 1);
+                                        copyPoint(neighbors[j][oIndexNeighbors], candidatePoints[oIndexCandidates], d + 1);
+                                        copyPoint(candidatePoints[oIndexCandidates], otemp, d + 1);
+                                        oIndexCandidates++;
+                                    }
+                                }*/
+
+                                //free(recvdCandidates);
+                                for (int p = 0; p < perProcessSize; ++p) {
+                                    free(oCandidatePoints[p]);
+                                }
+                                free(oCandidatePoints);
+                            }
+                        }
+
                     }
 
 
@@ -816,18 +905,43 @@ int main(int argc, char **argv) {
                     MPI_Send(&finishCode, 1, MPI_INT, n, 10, MPI_COMM_WORLD);
                 }
             }
-            MPI_Barrier(MPI_COMM_WORLD);
+            //MPI_Barrier(MPI_COMM_WORLD);
         } else { // It means this process helps the one that searches
             int temp = 0; // To be renamed to counter
             MPI_Recv(&temp, 1, MPI_INT, searchProcess, 10, MPI_COMM_WORLD, &mpiStat);
             //printf("%d received finish signal from %d\n", processID, searchProcess);
             while (temp != -1) {
                 // TODO search for candidates
+                /*float qp[d + 1];
+                float kNNDistance;
+                MPI_Recv(qp, d, MPI_FLOAT, searchProcess, 11, MPI_COMM_WORLD, &mpiStat); // Receive qp
+                MPI_Recv(&kNNDistance, 1, MPI_FLOAT, searchProcess, 12, MPI_COMM_WORLD, &mpiStat); // Receive kNNDistance
+                float **candidatePoints = (float **) malloc(perProcessSize * sizeof(float *));
+                for (int l = 0; l < perProcessSize; ++l) {
+                    candidatePoints[l] = (float *) malloc((d + 1) * sizeof(float));
+                }
+                int counterCandidates[] = {0};
+
+                int startOffset = noTotalProcesses - 1;
+                getCandidates(tree, startOffset + processID, startOffset + searchProcess, counterCandidates, candidatePoints, qp, kNNDistance);
+
+                MPI_Send(counterCandidates, 1, MPI_INT, searchProcess, 13, MPI_COMM_WORLD); // Send candidates counter
+                int sentSize = ((d + 1) * (*counterCandidates));
+                float *sentCandidates = (float *) malloc(sentSize * sizeof(float));
+                for (int j = 0; j < *counterCandidates; ++j) {
+                    copyPoint(&sentCandidates[j * (d + 1)], candidatePoints[j], d + 1);
+                }
+                MPI_Send(sentCandidates, sentSize, MPI_FLOAT, searchProcess, 14, MPI_COMM_WORLD); // Send candidates
 
 
-                MPI_Recv(&temp, 1, MPI_INT, searchProcess, 10, MPI_COMM_WORLD, &mpiStat);
+                for (int l = 0; l < perProcessSize; ++l) {
+                    free(candidatePoints[l]);
+                }
+                free(candidatePoints);
+                free(sentCandidates);
+                MPI_Recv(&temp, 1, MPI_INT, searchProcess, 10, MPI_COMM_WORLD, &mpiStat);*/
             }
-            MPI_Barrier(MPI_COMM_WORLD);
+            //MPI_Barrier(MPI_COMM_WORLD);
         }
     }
 
@@ -837,9 +951,18 @@ int main(int argc, char **argv) {
 
 
     // VALIDATION
-    for (int m = 0; m < noTotalProcesses; ++m) {
-        //shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for validation TODO uncomment this line
+    /*for (int m = 0; m < noTotalProcesses; ++m) {
+        shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for validation TODO uncomment this line
     }
+
+    for (int n = 0; n < 2 * totalSize - 1; ++n) {
+        int temp = totalSize - 1 + n;
+        if (tree[n].radius >= 0 || tree[n].radius == -99)//(tree[n].vp != NULL)
+            printf("Process %d sharedTree[%d] -> r = %f\tvp = (%f, %f)\n", processID, n, tree[n].radius, tree[n].vp[0], tree[n].vp[1]);
+        else
+            printf("Process %d sharedTree[%d] -> r = %f\n", processID, n, tree[n].radius);
+    }*/
+
     float ***validNeighbors = (float ***) malloc(perProcessSize * sizeof(float **)); // To store the neighbors of each local point
     for (int l = 0; l < perProcessSize; ++l) { // perProcessSize array needed for each point to store its kNN
         validNeighbors[l] = (float **) malloc(totalSize * sizeof(float *)); // k sized array needed for the neighbors
@@ -891,6 +1014,8 @@ int main(int argc, char **argv) {
     //MPI_Barrier(MPI_COMM_WORLD);
     //printf("Main Median = %f\n",median);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    printf("Process %d EXITING...\n", processID);
     MPI_Type_free(&mpi_node_type);
     MPI_Finalize();
 
