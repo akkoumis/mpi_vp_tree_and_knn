@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
     int totalSize, perProcessSize, loop, master, groups, perGroupSize; // Size = # of elems
 
     float *distances, **pointsCoordinates, **lessEqual, **greater;;
-    totalSize = 64;
+    totalSize = 128;
 
     MPI_Init(&argc, &argv);    /* starts MPI */
     MPI_Comm_rank(MPI_COMM_WORLD, &processID);    /* get current process id */
@@ -279,7 +279,8 @@ int main(int argc, char **argv) {
     //printf("%d\t%d\n", sizeof(node), sizeof(long int));
 
     node *tree = (node *) malloc((2 * totalSize - 1) * sizeof(node));
-    //printf("tree size = %d\n", (2 * totalSize - 1));
+    node *tree2 = (node *) malloc((2 * totalSize - 1) * sizeof(node));
+//printf("tree size = %d\n", (2 * totalSize - 1));
 
     // Each process read simultaneously its data, from the file
     FILE *fp;
@@ -686,10 +687,18 @@ int main(int argc, char **argv) {
     finishTree(processID, tree, treeOffset + processID, pointsCoordinates, perProcessSize, d, communicator); // Finish the tree locally
     MPI_Barrier(MPI_COMM_WORLD);
 
-    for (int m = 0; m < noTotalProcesses; ++m) {
-        shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for debugging
-        //fillTreeWithOtherProcesses(processID, m, tree, treeOffset + m, 2 * totalSize - 1); // Fill the blanks with holder's processID
+    for (int m = 0; m < 2 * totalSize - 1; ++m) {
+        tree2[m] = tree[m];
+        //printf("PID %d tree[%d] -> r = %f\n", processID, m, tree[m].radius);
     }
+
+    for (int m = 0; m < noTotalProcesses; ++m) {
+        shareTree(processID, m, tree2, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for debugging
+        fillTreeWithOtherProcesses(processID, m, tree, treeOffset + m, 2 * totalSize - 1); // Fill the blanks with holder's processID
+    }
+
+
+
 
     /*for (int n = 0; n < 2 * totalSize - 1; ++n) {
         int temp = totalSize - 1 + n;
@@ -781,6 +790,7 @@ int main(int argc, char **argv) {
                     if (localTreeStartIndex != startIndex) {
                         printf("At PID = %d searching for candidates starting at node %d\n", processID, localTreeStartIndex);
                         //printf("ERROR 1\n");
+
                         getCandidates(tree, localTreeStartIndex, startIndex, counterCandidates, candidatePoints, tree[qpIndex].vp,
                                       neighbors[j][k - 1][d]);
                         //printf("ERROR 2\n");
@@ -805,6 +815,7 @@ int main(int argc, char **argv) {
                         printf("QCandidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
                                candidatePoints[m][1], candidatePoints[m][d]);
                     }*/
+
 
                     // TODO integrate candidate points
                     int indexNeighbors, indexCandidates = 0;
@@ -917,7 +928,7 @@ int main(int argc, char **argv) {
                     MPI_Send(&finishCode, 1, MPI_INT, n, 10, MPI_COMM_WORLD);
                 }
             }
-            //MPI_Barrier(MPI_COMM_WORLD);
+//MPI_Barrier(MPI_COMM_WORLD);
         } else { // It means this process helps the one that searches
             int temp = 0; // To be renamed to counter
             MPI_Recv(&temp, 1, MPI_INT, searchProcess, 10, MPI_COMM_WORLD, &mpiStat);
@@ -964,9 +975,11 @@ int main(int argc, char **argv) {
 
 
     // VALIDATION
+
     /*for (int m = 0; m < noTotalProcesses; ++m) {
-        shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for validation TODO uncomment this line
+        shareTree(processID, m, tree, treeOffset + m, 2 * totalSize - 1, d); // Share the tree, for validation
     }
+
 
     for (int n = 0; n < 2 * totalSize - 1; ++n) {
         int temp = totalSize - 1 + n;
@@ -987,7 +1000,8 @@ int main(int argc, char **argv) {
     for (int j = 0; j < 1; ++j) { // TODO j<perProcessSize for every point of the process
         int o = processID * perProcessSize + j;
         int counterLeaf[] = {0};
-        findLeafsAndCalculateDistance(tree, 0, counterLeaf, validNeighbors[j], tree[totalSize - 1 + o].vp, d);
+        //printf("ERROR 1\n");
+        findLeafsAndCalculateDistance(tree2, 0, counterLeaf, validNeighbors[j], tree[totalSize - 1 + o].vp, d);
         qsort(validNeighbors[j], totalSize, sizeof(*validNeighbors), compareBasedOnDistance);
         int valid = 1;
         for (int i = 0; i < maxK; ++i) {
@@ -1012,6 +1026,9 @@ int main(int argc, char **argv) {
         free(neighbors[l]);
     }
     free(neighbors);
+    free(tree);
+    free(tree2);
+
 
     // Free for malloc
     free(distances);
