@@ -143,15 +143,21 @@ float kNNDistance) {
             //printf("Found candidate[%d]\n", *counterCandidates);
             if (*counterCandidates > 0) {
                 int i = 0;
-                while (distanceQPToLeaf > candidates[i][d]) {
+                //printf("ERROR 1\n");
+                //printf("candidate[%d] dist = %f\n", i, calculateDistance(qp, candidates[i], d));
+                while (distanceQPToLeaf > calculateDistance(qp, candidates[i], d)) {
                     i++;
+                    if (i >= *counterCandidates)
+                        break;
                 }
+                //printf("ERROR 2\n");
                 for (int j = *counterCandidates; j > i; j--) {
                     copyPoint(candidates[j], candidates[j - 1], d + 1);
                 }
                 //printf("Inserting candidate[%d] at index %d\n", *counterCandidates, i);
                 copyPoint(candidates[i], tree[startIndex].vp, d);
                 candidates[i][d] = distanceQPToLeaf;
+
             } else {/**/
                 //printf("Inserting candidate[%d] at index %d\n", *counterCandidates, *counterCandidates);
                 copyPoint(candidates[*counterCandidates], tree[startIndex].vp, d);
@@ -174,11 +180,13 @@ void getCandidatesOthers(const node *tree, int startIndex, int *counterCandidate
     if (tree[startIndex].radius == -99) { // Reached the leafs
         float distanceQPToLeaf = calculateDistance(qp, tree[startIndex].vp, d);
         if (distanceQPToLeaf < kNNDistance) {
-            printf("Found candidate[%d]\n", *counterCandidates);
+            //printf("Found candidate[%d]\n", *counterCandidates);
             if (*counterCandidates > 0) {
                 int i = 0;
-                while (distanceQPToLeaf > candidates[i][d]) {
+                while (distanceQPToLeaf > calculateDistance(qp, candidates[i], d)) {
                     i++;
+                    if (i >= *counterCandidates)
+                        break;
                 }
                 for (int j = *counterCandidates; j > i; j--) {
                     copyPoint(candidates[j], candidates[j - 1], d + 1);
@@ -710,7 +718,7 @@ int main(int argc, char **argv) {
     maxK = k;
 
     MPI_Barrier(MPI_COMM_WORLD);
-    for (int searchProcess = 1; searchProcess < 2; ++searchProcess) { // TODO process < noTotalProcesses
+    for (int searchProcess = 0; searchProcess < noTotalProcesses; ++searchProcess) { // TODO process < noTotalProcesses
         MPI_Barrier(MPI_COMM_WORLD);
         if (searchProcess == processID) { // It means that this process execute the search
             int startIndex, parentIndex, qpIndex;
@@ -772,8 +780,10 @@ int main(int argc, char **argv) {
                     //printf("At PID = %d\tlocalTreeStartIndex = %d\tstartIndex = %d\n", processID, localTreeStartIndex, startIndex);
                     if (localTreeStartIndex != startIndex) {
                         printf("At PID = %d searching for candidates starting at node %d\n", processID, localTreeStartIndex);
+                        //printf("ERROR 1\n");
                         getCandidates(tree, localTreeStartIndex, startIndex, counterCandidates, candidatePoints, tree[qpIndex].vp,
                                       neighbors[j][k - 1][d]);
+                        //printf("ERROR 2\n");
                     }
                     for (int m = 0; m < *counterCandidates; ++m) {
                         //printf("Candidates[%d] @ pid %d = (%f, %f) distFromVP = %f\n", m, processID, candidatePoints[m][0],
@@ -833,17 +843,19 @@ int main(int argc, char **argv) {
                         for (int l = 0; l < noTotalProcesses; ++l) { //TODO nototalpro
                             if (l != processID) {
                                 int count = 1;
-                                /*      MPI_Send(&count, 1, MPI_INT, l, 10, MPI_COMM_WORLD); // Send signal
-                                      MPI_Send(tree[qpIndex].vp, d, MPI_FLOAT, l, 11, MPI_COMM_WORLD); // Send qp
-                                      MPI_Send(&neighbors[j][k - 1][d], 1, MPI_FLOAT, l, 12, MPI_COMM_WORLD); // Send kNN distance
-                                      float temp[d + 1];
-                                      MPI_Recv(&count, 1, MPI_INT, l, 13, MPI_COMM_WORLD, &mpiStat); // Receive candidates counter
-                                      int recvdSize = count * (d + 1);
-                                      float *recvdCandidates = (float *) malloc(recvdSize * sizeof(float));
-                                      MPI_Recv(recvdCandidates, recvdSize, MPI_FLOAT, l, 14, MPI_COMM_WORLD, &mpiStat); // Receive candidates
-                                      for (int m = 0; m < count; ++m) {
-                                          copyPoint(candidatePoints[m], &recvdCandidates[m * (d + 1)], d + 1);
-                                      }*/
+                                MPI_Send(&count, 1, MPI_INT, l, 10, MPI_COMM_WORLD); // Send signal
+                                MPI_Send(tree[qpIndex].vp, d, MPI_FLOAT, l, 11, MPI_COMM_WORLD); // Send qp
+                                MPI_Send(&neighbors[j][k - 1][d], 1, MPI_FLOAT, l, 12, MPI_COMM_WORLD); // Send kNN distance
+                                float temp[d + 1];
+                                MPI_Recv(&count, 1, MPI_INT, l, 13, MPI_COMM_WORLD, &mpiStat); // Receive candidates counter
+                                int recvdSize = count * (d + 1);
+                                float *recvdCandidates = (float *) malloc(recvdSize * sizeof(float));
+                                MPI_Recv(recvdCandidates, recvdSize, MPI_FLOAT, l, 14, MPI_COMM_WORLD, &mpiStat); // Receive candidates
+                                for (int m = 0; m < count; ++m) {
+                                    copyPoint(candidatePoints[m], &recvdCandidates[m * (d + 1)], d + 1);
+                                }/**/
+
+
                                 int startOffset = noTotalProcesses - 1;
                                 //printf("Other searching PID %d at index = %d for kNNDistance = %f\n", processID, startOffset + processID,
                                 //        neighbors[j][k - 1][d]);
@@ -853,14 +865,14 @@ int main(int argc, char **argv) {
                                 for (int p = 0; p < perProcessSize; ++p) {
                                     oCandidatePoints[p] = (float *) malloc((d + 1) * sizeof(float));
                                 }
-                                getCandidatesOthers(tree, startOffset + l, oCounterCandidates, oCandidatePoints, tree[qpIndex].vp,
+                                /*getCandidatesOthers(tree, startOffset + l, oCounterCandidates, oCandidatePoints, tree[qpIndex].vp,
                                                     neighbors[j][k - 1][d]);
-                                /*printf("Other searching PID %d at index = %d. Found %d cands\n", processID, startOffset + processID,
+                                printf("Other searching PID %d at index = %d. Found %d cands\n", processID, startOffset + processID,
                                        *oCounterCandidates);
                                 for (int m = 0; m < count; ++m) {
                                     printf("PID %d from %d candidate[%d] = (%f, %f) distFromVP = %f\n", processID, l, m, oCandidatePoints[m][0],
                                            oCandidatePoints[m][1], oCandidatePoints[m][d]);
-                                }
+                                }*/
 
 
                                 int oIndexNeighbors, oIndexCandidates = 0;
@@ -875,9 +887,9 @@ int main(int argc, char **argv) {
                                         copyPoint(candidatePoints[oIndexCandidates], otemp, d + 1);
                                         oIndexCandidates++;
                                     }
-                                }*/
+                                }
 
-                                //free(recvdCandidates);
+                                free(recvdCandidates);
                                 for (int p = 0; p < perProcessSize; ++p) {
                                     free(oCandidatePoints[p]);
                                 }
@@ -912,7 +924,7 @@ int main(int argc, char **argv) {
             //printf("%d received finish signal from %d\n", processID, searchProcess);
             while (temp != -1) {
                 // TODO search for candidates
-                /*float qp[d + 1];
+                float qp[d + 1];
                 float kNNDistance;
                 MPI_Recv(qp, d, MPI_FLOAT, searchProcess, 11, MPI_COMM_WORLD, &mpiStat); // Receive qp
                 MPI_Recv(&kNNDistance, 1, MPI_FLOAT, searchProcess, 12, MPI_COMM_WORLD, &mpiStat); // Receive kNNDistance
@@ -923,6 +935,7 @@ int main(int argc, char **argv) {
                 int counterCandidates[] = {0};
 
                 int startOffset = noTotalProcesses - 1;
+
                 getCandidates(tree, startOffset + processID, startOffset + searchProcess, counterCandidates, candidatePoints, qp, kNNDistance);
 
                 MPI_Send(counterCandidates, 1, MPI_INT, searchProcess, 13, MPI_COMM_WORLD); // Send candidates counter
@@ -939,7 +952,7 @@ int main(int argc, char **argv) {
                 }
                 free(candidatePoints);
                 free(sentCandidates);
-                MPI_Recv(&temp, 1, MPI_INT, searchProcess, 10, MPI_COMM_WORLD, &mpiStat);*/
+                MPI_Recv(&temp, 1, MPI_INT, searchProcess, 10, MPI_COMM_WORLD, &mpiStat);/**/
             }
             //MPI_Barrier(MPI_COMM_WORLD);
         }
@@ -1015,7 +1028,7 @@ int main(int argc, char **argv) {
     //printf("Main Median = %f\n",median);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    printf("Process %d EXITING...\n", processID);
+    //printf("Process %d EXITING...\n", processID);
     MPI_Type_free(&mpi_node_type);
     MPI_Finalize();
 
