@@ -1,13 +1,12 @@
-# mpiFindIntegerMedian
-Hoare's Select algorithm implemented in MPI for finding the median of an integer array
+# mpi VP Tree and kNN
+This program creates a vp tree in parallel, using the MPI interface, and searches for the nearest neighbors of the leafs.
 
-The program takes only one argument, the size of the integer array. Be sure not to exceed 2^31-1.
+The program was developed using totalSize = 64 and everything worked fine. However, when using greater numbers, an error occurs in int index1G, for no apparent reason.
 
-Validation of the median is built in within the program. It can run either in serial (by choosing number of processes = 1) or in parallel. Execution time is displayed in the end.
+More debugging and work needed to sort these details out.
 
-It serves as a good MPI Introductory example.
+The project will be finished, regardless of the assignment. It's a matter of principle.
 
-Athanassios Kintsakis
-athanassios.kintsakis@gmail.com
-akintsakis@issel.ee.auth.gr
+Anastasios Koumis
+akkoumis@ece.auth.gr
 
